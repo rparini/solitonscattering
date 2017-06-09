@@ -44,13 +44,16 @@ print('mu', mu)
 print('W', field.eigenfunction_wronskian(mu, ODEIntMethod='CRungeKuttaArray'))
 # field.show_eigenfunction(mu)
 
-# # import matplotlib.pyplot as plt
-# # W = lambda z: field.eigenfunction_wronskian(z, ODEIntMethod='CRungeKuttaArray')
-# # W = np.vectorize(W)
-# # mu = -1j*np.linspace(0.01,1,1000)
-# # plt.ylim(-10,10)
-# # plt.plot(np.imag(mu), np.abs(W(mu)))
-# # plt.show()
+import matplotlib.pyplot as plt
+W = lambda z: field.eigenfunction_wronskian(z, ODEIntMethod='CRungeKuttaArray')
+print(W(-1j*0.01))
+W = np.vectorize(W, otypes=[np.ndarray])
+mu = -1j*np.linspace(0.01,1,1000)
+# print(W(-1j*0.01))
+print(W(mu))
+plt.ylim(-10,10)
+plt.plot(np.imag(mu), np.abs(W(mu)))
+plt.show()
 
 # eigenvalues = field.boundStateEigenvalues(radiusRange, ODEIntMethod='CRungeKuttaArray')
 # print(eigenvalues)
