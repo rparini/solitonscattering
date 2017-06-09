@@ -16,6 +16,7 @@ k = 0.145
 x0 = -20
 
 state = SG.kink(x,0,v0,x0,epsilon=-1)
+field = SG.SineGordon(timeStepFunc='eulerRobin', **state)
 
 """
 Looping over field.eigenfunction_wronskian(m, ODEIntMethod='CRungeKuttaArray') seems to be the quickest by far
