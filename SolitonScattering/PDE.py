@@ -163,45 +163,34 @@ class PDE(object):
 		fullx = self.state['x']
 		h = fullx[1] - fullx[0]
 
+		# XXX: At the moment the fastest way to take a vector of mu is to just loop over mu.
+		# if mu is not given as an array make it an array of length 1
+		if not hasattr(mu, '__iter__'):
+			mu = np.array([mu])
+
 		# get initial condition y(xL)
 		yBoundL = self.left_asyptotic_eigenfunction(mu, xL)
 
-		# for m values of mu flatten eigenfuncion into laxSize*m size vector
-		laxSize = yBoundL.shape[-1]
-		yBoundL = yBoundL.flatten() 
-
 		# get xLax in the interval [xL, xR] with spacing h
+		# V.shape = (#values of mu, #points x, size of lax pair, size of lax pair)
 		V = self.xLax(mu)[xLIndex:xRIndex+1]
-		if len(V.shape) == 4 and ODEIntMethod == 'RungeKuttaArray':
-			# for m values of mu make an m*laxSize x m*laxSize matrix with 
-			# each block on the diagonal corresponding to a value for m
-			V = [scipy.sparse.block_diag(V[:,i,:,:], format='bsr') for i in range(V.shape[1])]
-		elif len(V.shape) == 4 and ODEIntMethod == 'CRungeKuttaArray':
-			# cant' cope with sparse matricies
-			V = np.array([scipy.linalg.block_diag(*V[:,i,:,:]) for i in range(V.shape[1])])
 
 		# solve for the Jost eigenfunction which at xL matches the left asymptotic eigenfunction
 		# note that stepsize for Runge Kutta 4th order is 2h since it requires midpoint values
 		if ODEIntMethod == 'CRungeKuttaArray':
-			yR = ODE.CRungeKuttaArray(2*h, yBoundL, V)
+			yR = np.array([ODE.CRungeKuttaArray(2*h, yBoundL[i], V[i]) for i in range(len(mu))])
 		elif ODEIntMethod == 'RungeKuttaArray':
-			yR = ODE.RungeKuttaArray(2*h, yBoundL, V)[-1]
-		yR = yR.reshape(-1,laxSize)
+			yR = np.array([ODE.RungeKuttaArray(2*h, yBoundL[i], V[i])[-1] for i in range(len(mu))])
 
 		# M is the number of steps acually taken by Runge Kutta
-		try:
-			M = (V.shape[0]-1)//2
-		except:
-			# if V is a list of 2x2 matricies
-			M = (len(V)-1)//2
+		M = (V.shape[1]-1)//2
 
 		# so that the real xR is
 		xR = xL + 2*h*M
-		# print('xR', xR)
 
 		# calculate the wronskian of the eigenfunction we solve for and
 		# the bound sate eigenfunction
-		yBoundR = self.right_asyptotic_eigenfunction(mu, xR).reshape(-1,laxSize)
+		yBoundR = self.right_asyptotic_eigenfunction(mu, xR)
 		return yR[:,0]*yBoundR[:,1] - yR[:,1]*yBoundR[:,0]
 
 	def show_eigenfunction(self, mu):
