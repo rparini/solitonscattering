@@ -252,16 +252,8 @@ class SineGordon(PDE):
 		center = 0
 		phiRange = [0,pi]
 		C = PolarRect(center, radiusRange, phiRange)
-		# C.show()
 
 		W = lambda z: self.eigenfunction_wronskian(z,ODEIntMethod)
-		# currently, looping is faster than trying to do all the values of mu at once
-		W = np.vectorize(W)
-
-		# import matplotlib.pyplot as plt
-		# t = np.linspace(0,1,1001)
-		# plt.plot(t, W(C(t)))
-		# plt.show()
 
 		conjugateSymmetry = lambda z: [z.conjugate()]
 
