@@ -246,12 +246,23 @@ class SineGordon(PDE):
 		else:
 			return exp(1j*(mu-1/(16*mu))*x) * np.array([1, 1j])
 
-	def boundStateEigenvalues(self, radiusRange, ODEIntMethod='CRungeKuttaArray'):
-		# find the bound state eigenvalues of the 'x' part of the Lax pair
-		from cxroots import PolarRect, findRoots, demo_findRoots
+	def boundStateRegion(self, vRange):
+		from cxroots import PolarRect
+		# get the region in which to look for bound state eigenvalues
+		radiusBuffer = 0.05
+		mu = lambda v: 0.25j*sqrt((1-v)/(1+v))
+		radiusRange = np.sort(np.abs(mu(np.array(vRange))))
+		radiusRange = [radiusRange[0]-radiusBuffer,
+					   radiusRange[1]+radiusBuffer]
+
 		center = 0
 		phiRange = [0,pi]
-		C = PolarRect(center, radiusRange, phiRange)
+		return PolarRect(center, radiusRange, phiRange)
+
+	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray'):
+		# find the bound state eigenvalues of the 'x' part of the Lax pair
+		from cxroots import findRoots
+		C = self.boundStateRegion(vRange)
 
 		W = lambda z: self.eigenfunction_wronskian(z,ODEIntMethod)
 
@@ -262,7 +273,6 @@ class SineGordon(PDE):
 		roots, multiplicities = findRoots(C, W, guessRootSymmetry=rootSymmetry,
 			absTol=1e-6, relTol=1e-6)
 		return roots
-
 
 	def show_eigenvalues(self, radiusRange, ODEIntMethod='CRungeKuttaArray'):
 		import matplotlib.pyplot as plt
