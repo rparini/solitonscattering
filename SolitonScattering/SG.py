@@ -255,9 +255,9 @@ class SineGordon(PDE):
 
 		W = lambda z: self.eigenfunction_wronskian(z,ODEIntMethod)
 
-		conjugateSymmetry = lambda z: [z.conjugate()]
+		rootSymmetry = lambda z: [-z.conjugate()]
 
-		roots, multiplicities = findRoots(C, W, guessRootSymmetry=conjugateSymmetry,
+		roots, multiplicities = findRoots(C, W, guessRootSymmetry=rootSymmetry,
 			absTol=1e-6, relTol=1e-6)
 		return roots
 
