@@ -269,7 +269,7 @@ class SineGordon(PDE):
 		# roots occour either on the imaginary axis or in pairs with opposite real parts
 		rootSymmetry = lambda z: [-z.conjugate()]
 
-		roots, multiplicities = findRoots(C, W, guessRootSymmetry=rootSymmetry,
+		roots, multiplicities = C.findRoots(W, guessRootSymmetry=rootSymmetry,
 			absTol=1e-6, relTol=1e-6)
 		return roots
 
