@@ -274,6 +274,23 @@ class SineGordon(PDE):
 		return roots
 
 	def show_eigenvalues(self, radiusRange, ODEIntMethod='CRungeKuttaArray'):
+	@property
+	def charge(self):
+		# The topological charge of the field
+		x, u = self.state['x'], self.state['u']
+		Q = np.round(u/(2*pi))
+		Qerr = np.abs(u-2*pi*Q)
+
+		QerrIndicies = np.where(Qerr<1e-2)[0]
+		lBndry = QerrIndicies[0]
+		rBndry = QerrIndicies[-1]
+
+		# import matplotlib.pyplot as plt
+		# plt.plot(self.state['x'], Qerr)
+		# plt.plot(x, np.where(Qerr<1e-2,np.ones_like(x),np.zeros_like(x)))
+		# plt.show()
+
+		return int(Q[lBndry]-Q[rBndry])
 		import matplotlib.pyplot as plt
 		eigenvalues = field.boundStateEigenvalues(radiusRange, ODEIntMethod)
 
