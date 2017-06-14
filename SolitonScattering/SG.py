@@ -283,11 +283,6 @@ class SineGordon(PDE):
 
 		err = 1e-2
 
-		import matplotlib.pyplot as plt
-		plt.plot(self.state['x'], uerr)
-		plt.plot(x, np.where(np.logical_and(uerr<err, uterr<err), np.ones_like(x), np.zeros_like(x)))
-		plt.show()
-
 		errIndicies = np.where(np.logical_and(uerr<err, uterr<err))[0]
 		lBndry = errIndicies[0]
 		rBndry = errIndicies[-1]
