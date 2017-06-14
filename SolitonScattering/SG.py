@@ -275,6 +275,25 @@ class SineGordon(PDE):
 
 	def show_eigenvalues(self, radiusRange, ODEIntMethod='CRungeKuttaArray'):
 	@property
+	def indexLims(self):
+		# values of the field index at which the field and its derivatives are suitably small
+		x, u, ut = self.state['x'], self.state['u'], self.state['ut']
+		uerr = np.abs(u-2*pi*np.round(u/(2*pi)))
+		uterr = np.abs(ut)
+
+		err = 1e-2
+
+		import matplotlib.pyplot as plt
+		plt.plot(self.state['x'], uerr)
+		plt.plot(x, np.where(np.logical_and(uerr<err, uterr<err), np.ones_like(x), np.zeros_like(x)))
+		plt.show()
+
+		errIndicies = np.where(np.logical_and(uerr<err, uterr<err))[0]
+		lBndry = errIndicies[0]
+		rBndry = errIndicies[-1]
+		return lBndry, rBndry
+
+	@property
 	def charge(self):
 		# The topological charge of the field
 		x, u = self.state['x'], self.state['u']
