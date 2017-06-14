@@ -271,7 +271,7 @@ class SineGordon(PDE):
 
 		roots, multiplicities = C.findRoots(W, guessRootSymmetry=rootSymmetry,
 			absTol=1e-6, relTol=1e-6)
-		return roots
+		return np.array(roots)
 
 	def show_eigenvalues(self, radiusRange, ODEIntMethod='CRungeKuttaArray'):
 	@property
