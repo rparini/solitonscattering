@@ -191,7 +191,12 @@ class PDE(object):
 		# calculate the wronskian of the eigenfunction we solve for and
 		# the bound sate eigenfunction
 		yBoundR = self.right_asyptotic_eigenfunction(mu, xR)
-		return yR[:,0]*yBoundR[:,1] - yR[:,1]*yBoundR[:,0]
+		W = yR[:,0]*yBoundR[:,1] - yR[:,1]*yBoundR[:,0]
+
+		if len(W) == 1:
+			return W[0]
+		else:
+			return W
 
 	def show_eigenfunction(self, mu):
 		import matplotlib.pyplot as plt
