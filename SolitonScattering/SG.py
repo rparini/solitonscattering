@@ -266,8 +266,7 @@ class SineGordon(PDE):
 
 		W = lambda z: self.eigenfunction_wronskian(z,ODEIntMethod)
 
-		# roots occour either on the imaginary axis or in pairs with opposite
-		# real parts
+		# roots occour either on the imaginary axis or in pairs with opposite real parts
 		rootSymmetry = lambda z: [-z.conjugate()]
 
 		roots, multiplicities = findRoots(C, W, guessRootSymmetry=rootSymmetry,
