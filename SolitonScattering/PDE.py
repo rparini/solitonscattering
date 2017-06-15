@@ -70,6 +70,7 @@ class PDE(object):
 		from matplotlib import pyplot as plt
 		x, u = [self.state[k] for k in ['x','u']]
 		plt.plot(x, u, label='u')
+		plt.xlim(x[0],x[-1])
 		ax = plt.gca()
 
 		if showLims:
@@ -89,7 +90,6 @@ class PDE(object):
 				plt.text(xRAxis-.01, 1.01, '$x_R$', transform=ax.transAxes)
 				ax.axvline(xR, color='k', linestyle='--')
 
-		plt.xlim(x[0],x[-1])
 
 	def show_state(self, saveFile=None, **kwargs):
 		from matplotlib import pyplot as plt
