@@ -303,6 +303,17 @@ class SineGordon(PDE):
 		import matplotlib.pyplot as plt
 		eigenvalues = field.boundStateEigenvalues(radiusRange, ODEIntMethod)
 
+	def plot_state(self, *args, **kwargs):
+		PDE.plot_state(self, *args, **kwargs)
+
+		# make the y axis in multiples of 2pi
+		from matplotlib import pyplot as plt
+		ylim = plt.gca().get_ylim()
+
+		# XXX: should generalize to arbitary limits
+		plt.yticks([-pi,0,pi,2*pi,3*pi,4*pi],['$-\pi$','$0$','$\pi$','$2\pi$','$3\pi$','$4\pi$'])
+		plt.ylim(ylim)
+
 
 		plt.scatter(eigenvalues.real, eigenvalues.imag)
 

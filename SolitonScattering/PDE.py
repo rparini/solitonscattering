@@ -66,11 +66,38 @@ class PDE(object):
 			args.update(timeStepArgs)
 			self.state = self.time_step(**args)
 
-	def show_state(self):
+	def plot_state(self, showLims=False):
 		from matplotlib import pyplot as plt
 		x, u = [self.state[k] for k in ['x','u']]
 		plt.plot(x, u, label='u')
-		plt.show()
+		ax = plt.gca()
+
+		if showLims:
+			iLims = self.indexLims
+			xL, xR = x[iLims[0]], x[iLims[1]]
+			ax.set_ylim()
+
+			# get the points x=xL and x=xR in axis coordinates
+			xLAxis = ax.transAxes.inverted().transform(ax.transData.transform((xL,0)))[0]
+			xRAxis = ax.transAxes.inverted().transform(ax.transData.transform((xR,0)))[0]
+
+			if showLims != 'xR':
+				plt.text(xLAxis-.01, 1.01, '$x_L$', transform=ax.transAxes)
+				ax.axvline(xL, color='k', linestyle='--')
+
+			if showLims != 'xL':
+				plt.text(xRAxis-.01, 1.01, '$x_R$', transform=ax.transAxes)
+				ax.axvline(xR, color='k', linestyle='--')
+
+		plt.xlim(x[0],x[-1])
+
+	def show_state(self, saveFile=None, **kwargs):
+		from matplotlib import pyplot as plt
+		self.plot_state(**kwargs)
+		if saveFile:
+			plt.savefig(saveFile, bbox_inches='tight')
+		else:
+			plt.show()
 
 	def save_animation(self, saveFile, tFin, fps = 60, writer = None, dpi = 200, codec = None, **timeStepArgs):
 		frames = int(tFin / timeStepArgs['dt'])
