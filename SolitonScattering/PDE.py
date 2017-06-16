@@ -94,6 +94,8 @@ class PDE(object):
 				plt.text(xRAxis-.01, 1.01, '$x_R$', transform=ax.transAxes)
 				ax.axvline(xR, color='k', linestyle='--', linewidth=1)
 
+		plt.ylabel('$u$')
+		plt.xlabel('$x$')
 
 	def show_state(self, saveFile=None, **kwargs):
 		from matplotlib import pyplot as plt
