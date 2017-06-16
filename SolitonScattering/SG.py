@@ -61,8 +61,8 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	if dynamicRange:
 		checkRange = 10
 		# check if there is anything within checkRange spatial points of the left boundary
-		if np.any(abs(u[:checkRange]-dirichletValue) > 1e-6):
-			# add another 10 points on to the end
+		if np.any(abs(u[:checkRange]-dirichletValue) > 1e-4):
+			# add another checkRange points on to the end
 			newPoints = np.linspace(x[0] - checkRange*dx, x[0] - dx, checkRange)
 
 			x = np.insert(x, 0, newPoints)
