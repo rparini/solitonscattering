@@ -280,12 +280,42 @@ class SineGordon(PDE):
 		x, u, ut = self.state['x'], self.state['u'], self.state['ut']
 		uerr = np.abs(u-2*pi*np.round(u/(2*pi)))
 		uterr = np.abs(ut)
+		uxerr = np.abs(self.ux)
 
-		err = 1e-2
+		# get the regions to the right and left of anything 'interesting'
+		uerrOk = np.where(uerr<1e-1, np.ones_like(x), np.zeros_like(x))
+		uerrOkIndicies = np.where(uerr<1e-1)[0]
 
-		errIndicies = np.where(np.logical_and(uerr<err, uterr<err))[0]
-		lBndry = errIndicies[0]
-		rBndry = errIndicies[-1]
+		if uerrOk[0] == 1:
+			lRegionIndicies = (int(uerrOkIndicies[0]), int(np.where(np.diff(uerrOk)<0)[0][0]))
+		else:
+			lRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][0]+1), int(np.where(np.diff(uerrOk)<0)[0][0]))
+
+		if uerrOk[-1] == 1:
+			rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
+		else:
+			rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+
+		# within these regions find the minimum of the error function
+		# XXX: make a more considered choice for the error function, perhaps involving x
+		errfunc = uerr+uterr+uxerr
+
+		lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]])
+		rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]])
+
+		# import matplotlib.pyplot as plt
+		# ax = plt.gca()
+		# plt.plot(x,u)
+		# plt.plot(x,uerrOk)
+		# ax.axvline(x[lRegionIndicies[0]])
+		# ax.axvline(x[lRegionIndicies[1]])
+		# ax.axvline(x[rRegionIndicies[0]])
+		# ax.axvline(x[rRegionIndicies[1]])
+		# plt.plot(x,errfunc)
+		# ax.axvline(x[lBndry], color='k')
+		# ax.axvline(x[rBndry], color='k')
+		# plt.show()
+
 		return lBndry, rBndry
 
 	@property
