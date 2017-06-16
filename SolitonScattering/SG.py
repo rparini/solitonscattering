@@ -334,7 +334,6 @@ class SineGordon(PDE):
 		lBndry = QerrIndicies[0]
 		rBndry = QerrIndicies[-1]
 
-		import matplotlib.pyplot as plt
 		eigenvalues = field.boundStateEigenvalues(radiusRange, ODEIntMethod)
 		return int(Q[rBndry]-Q[lBndry])
 
@@ -351,6 +350,131 @@ class SineGordon(PDE):
 
 
 		plt.scatter(eigenvalues.real, eigenvalues.imag)
+	def typeEigenvalues(self, eigenvalues):
+		# get the total field topological charge
+		Q = self.charge
+
+		# first filter out all the breathers
+		breatherIndicies = np.where(solitonFrequency(eigenvalues) > 1e-5)[0]
+		typedEigenvalues = [(l, 'Breather') for l in eigenvalues[breatherIndicies]]
+		eigenvalues = np.delete(eigenvalues, breatherIndicies)
+
+		if len(eigenvalues) == 1:
+			# if there's only one kink/antikink left look at the field's total topological charge
+			if Q == 1:
+				typedEigenvalues.append((eigenvalues[0], 'Kink'))
+			elif Q == -1:
+				typedEigenvalues.append((eigenvalues[0], 'Antikink'))
+
+			eigenvalues = np.delete(eigenvalues, 0)
+
+
+		# elif len(untypedEigenvalues) == 2 and Q == 0 and not self.quickSoltype:
+		# 	# if there's two then it's a kink + antikink and we need to work out which is which
+		# 	# the only distingusing factor between the eigenvalues is the speed
+		# 	# so we'll estimate the speed the old fashioned way by running the time evolution a little more
+
+		# 	if not hasattr(self, 'ut') or not hasattr(self, 'u'):
+		# 		# if we haven't saved the field then just run the time evolution until we have it
+		# 		self.get_rebounded(self.t)
+
+		# 	def get_typedPositions(u, x):
+		# 		# get the positions of kinks and antikinks
+
+		# 		# find where kinks and antikinks have their midpoint
+		# 		if u[np.abs(u).argmax()] > 0:
+		# 			midpoint = eq.roundNearest(u[0]) + pi
+		# 		elif u[np.abs(u).argmax()] < 0:
+		# 			midpoint = eq.roundNearest(u[0]) - pi
+
+		# 		# get the two points just above the kink/antikink midpoint
+		# 		try:
+		# 			pointsAboveMidpoint = (u[u > midpoint][0], u[u > midpoint][-1])
+		# 		except IndexError:
+		# 			# sometimes the kink and antikink are too close together
+		# 			return None
+
+		# 		# Interpolate to find the place where the field = midpoint
+		# 		typedPositions = {}
+		# 		for u1 in pointsAboveMidpoint:
+		# 			index1 = np.abs(u - u1).argmin()
+		# 			index0 = index1 - 1
+		# 			x0, x1 = x[index0], x[index1]
+		# 			u0 = u[index0]
+
+		# 			ux = (u1 - u0) / (x1 - x0)
+		# 			if ux > 0:
+		# 				soltype = 'Kink'
+		# 			else:
+		# 				soltype = 'Antikink'
+
+		# 			solpos = x0 + (x1 - x0) * (midpoint - u0) / (u1 - u0)
+		# 			typedPositions[soltype] = solpos
+
+		# 		try:
+		# 			typedPositions['Kink']
+		# 			typedPositions['Antikink']
+		# 		except KeyError:
+		# 			return None
+
+		# 		return typedPositions
+
+		# 	# get the initial position of the kink and antikink
+		# 	typedPos0 = get_typedPositions(self.u, self.x)
+		# 	if typedPos0 == None:
+		# 		# can't figure out which eigenvalue is which
+		# 		for eigenvalue in untypedEigenvalues:
+		# 			typedEigenvalues.append((eigenvalue, 'Unknown'))
+		# 		return typedEigenvalues
+
+
+		# 	# run the time evolution
+		# 	k = self.parameters[1]
+		# 	timeStep = SG.timeStepGen(self.x[0], self.x[-1], self.Options['pointDensity'], self.t,
+		# 							  inf, self.Options['dt'], self.u, self.ut, self.Options['boundaryType'], k, xi = self.xi)
+
+		# 	t, t0 = self.t, self.t
+		# 	u, x = self.u, self.x
+		# 	while t < t0 + 10 or get_typedPositions(u, x) == None:
+		# 		(u,ut,t,x) = timeStep.next()
+		# 	t1 = t
+
+		# 	# from matplotlib import pyplot as plt
+		# 	# print t1
+		# 	# plt.plot(x,u)
+		# 	# plt.show()
+
+		# 	# get the position of the kink and antikink at t1
+		# 	typedPos1 = get_typedPositions(u, x)
+
+		# 	# work out the speed
+		# 	kinkSpeed = (typedPos1['Kink'] - typedPos0['Kink']) / (t1 - t0)
+		# 	antikinkSpeed = (typedPos1['Antikink'] - typedPos0['Antikink']) / (t1 - t0)
+
+		# 	# now match the manual speed with the eigenvalue speed
+		# 	eigenvalueSpeed    = np.vectorize(solitonVelocity)(untypedEigenvalues)
+		# 	kinkEigenvalue     = untypedEigenvalues.pop(np.abs(eigenvalueSpeed - kinkSpeed).argmin())
+		# 	typedEigenvalues.append((kinkEigenvalue, 'Kink'))
+
+		# 	eigenvalueSpeed    = np.vectorize(solitonVelocity)(untypedEigenvalues)
+		# 	antikinkEigenvalue = untypedEigenvalues.pop(np.abs(eigenvalueSpeed - antikinkSpeed).argmin())
+		# 	typedEigenvalues.append((antikinkEigenvalue, 'Antikink'))
+
+		# elif len(untypedEigenvalues) == abs(q):
+		# 	# we've probably got a series of kinks/antikinks
+		# 	for i in xrange(abs(q)):
+		# 		eigenvalue = untypedEigenvalues.pop(0)
+		# 		if Q > 0:
+		# 			typedEigenvalues.append((eigenvalue, 'Kink'))
+		# 		elif Q < 0:
+		# 			typedEigenvalues.append((eigenvalue, 'Antikink'))
+
+		# if there are any eigenvalues left then they are unknown
+		for eigenvalue in eigenvalues:
+			typedEigenvalues.append((eigenvalue, 'Unknown'))
+
+		return typedEigenvalues
+
 
 		plotRad = ceil(radiusRange[1])
 		plt.xlim(-plotRad, plotRad)
