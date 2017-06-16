@@ -88,11 +88,11 @@ class PDE(object):
 
 			if showLims != 'xR':
 				plt.text(xLAxis-.01, 1.01, '$x_L$', transform=ax.transAxes)
-				ax.axvline(xL, color='k', linestyle='--')
+				ax.axvline(xL, color='k', linestyle='--', linewidth=1)
 
 			if showLims != 'xL':
 				plt.text(xRAxis-.01, 1.01, '$x_R$', transform=ax.transAxes)
-				ax.axvline(xR, color='k', linestyle='--')
+				ax.axvline(xR, color='k', linestyle='--', linewidth=1)
 
 
 	def show_state(self, saveFile=None, **kwargs):
