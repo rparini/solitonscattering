@@ -66,8 +66,12 @@ class PDE(object):
 			args.update(timeStepArgs)
 			self.state = self.time_step(**args)
 
-	def plot_state(self, showLims=False):
+	def plot_state(self, showLims=False, useTex=False):
 		from matplotlib import pyplot as plt
+		if useTex:
+			plt.rc('text', usetex=True)
+			plt.rcParams.update({'font.size': 16})
+
 		x, u = [self.state[k] for k in ['x','u']]
 		plt.plot(x, u, label='u')
 		plt.xlim(x[0],x[-1])
