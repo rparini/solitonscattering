@@ -77,7 +77,7 @@ class PDE(object):
 		plt.xlim(x[0],x[-1])
 		ax = plt.gca()
 
-		if showLims:
+		if showLims is not False:
 			iLims = self.indexLims
 			xL, xR = x[iLims[0]], x[iLims[1]]
 			ax.set_ylim()
