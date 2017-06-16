@@ -329,9 +329,9 @@ class SineGordon(PDE):
 		lBndry = QerrIndicies[0]
 		rBndry = QerrIndicies[-1]
 
-		return int(Q[lBndry]-Q[rBndry])
 		import matplotlib.pyplot as plt
 		eigenvalues = field.boundStateEigenvalues(radiusRange, ODEIntMethod)
+		return int(Q[rBndry]-Q[lBndry])
 
 	def plot_state(self, *args, **kwargs):
 		PDE.plot_state(self, *args, **kwargs)
