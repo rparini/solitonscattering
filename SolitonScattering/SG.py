@@ -6,6 +6,11 @@ from warnings import warn
 
 from .PDE import PDE
 
+#### Some useful equations
+solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
+solitonFrequency = lambda l: np.real(l)/np.abs(l)
+
+
 #### Exact solutions to the sine-Gordon Eq. ####
 gamma = lambda v: 1 / sqrt(1 - v ** 2)
 
