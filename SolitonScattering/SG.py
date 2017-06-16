@@ -29,7 +29,7 @@ def kink(x, t, v, x0, epsilon=1):
 
 
 #### Time Stepping Methods ####
-def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=False):
+def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	dx = x[1] - x[0]
 
 	# save the value of the left and right boundaries for later use
