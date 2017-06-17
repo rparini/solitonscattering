@@ -355,7 +355,7 @@ class SineGordon(PDE):
 		Q = self.charge
 
 		# first filter out all the breathers
-		breatherIndicies = np.where(solitonFrequency(eigenvalues) > 1e-5)[0]
+		breatherIndicies = np.where(abs(solitonFrequency(eigenvalues)) > 1e-5)[0]
 		typedEigenvalues = [(l, 'Breather') for l in eigenvalues[breatherIndicies]]
 		eigenvalues = np.delete(eigenvalues, breatherIndicies)
 
