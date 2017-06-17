@@ -278,7 +278,6 @@ class SineGordon(PDE):
 			absTol=1e-4, relTol=1e-4)
 		return np.array(roots)
 
-	def show_eigenvalues(self, radiusRange, ODEIntMethod='CRungeKuttaArray'):
 	@property
 	def indexLims(self):
 		# values of the field index at which the field and its derivatives are suitably small
@@ -334,7 +333,6 @@ class SineGordon(PDE):
 		lBndry = QerrIndicies[0]
 		rBndry = QerrIndicies[-1]
 
-		eigenvalues = field.boundStateEigenvalues(radiusRange, ODEIntMethod)
 		return int(Q[rBndry]-Q[lBndry])
 
 	def plot_state(self, *args, **kwargs):
@@ -349,7 +347,6 @@ class SineGordon(PDE):
 		plt.ylim(ylim)
 
 
-		plt.scatter(eigenvalues.real, eigenvalues.imag)
 	def typeEigenvalues(self, eigenvalues):
 		# get the total field topological charge
 		Q = self.charge
@@ -475,9 +472,33 @@ class SineGordon(PDE):
 
 		return typedEigenvalues
 
+	def show_eigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', saveFile=None):
+		import matplotlib.pyplot as plt
+		eigenvalues = self.boundStateEigenvalues(vRange, ODEIntMethod)
+		eigenvalues = self.typeEigenvalues(eigenvalues)
+		C = self.boundStateRegion(vRange)
 
-		plotRad = ceil(radiusRange[1])
+		colorDict = {'Kink':'b', 
+					 'Antikink':'r', 
+					 'Breather':'g', 
+					 'Unknown':'k'}
+
+		path = C(np.linspace(0,1,1e3))
+		plt.plot(path.real, path.imag, linestyle='--', color='k')
+		for e, t in eigenvalues:
+			plt.scatter(e.real, e.imag, color=colorDict[t])
+
+		ax = plt.gca()
+		ax.set_aspect(1)
+
+		plotRad = 0.1+np.ceil(C.rRange[1]*10)/10
 		plt.xlim(-plotRad, plotRad)
-		plt.ylim(0, plotRad)
+		plt.ylim(-0.02, plotRad)
 		plt.xlabel('Re[$\lambda$]')
 		plt.ylabel('Im[$\lambda$]')
+
+		if saveFile is not None:
+			plt.savefig(saveFile, bbox_inches='tight')
+			plt.close()
+		else:
+			plt.show()
