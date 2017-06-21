@@ -4,6 +4,8 @@ import scipy
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf
 from copy import deepcopy
 from warnings import warn
+import inspect
+import xarray as xr
 
 from . import ODE
 
@@ -12,6 +14,25 @@ try:
 	matplotlib.use('TkAgg')
 except ImportError:
 	warn('Unable to import matplotlib')
+
+isnparray = lambda x: isinstance(x, np.ndarray)
+
+def stateFunc(fieldFunc):
+	def dataset_wrap(*args, **kwargs):
+		# put args in the kwargs
+		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
+		kwargs.update(zip(inspect.getargspec(fieldFunc)[0], args))
+
+		# figure out what variables we're vectorizing over (only numpy arrays)
+		vectorize = [key for key in kwargs.keys() if isnparray(kwargs[key])]
+
+		# get u, ut ect. from the given function
+		dataDict = fieldFunc(**kwargs)
+
+		data_vars = dict([(key, (vectorize, dataDict[key])) for key in dataDict.keys()])
+		coords = dict([(key, kwargs[key]) for key in vectorize])
+		return xr.Dataset(data_vars=data_vars, coords=coords)
+	return dataset_wrap
 
 class PDE(object):
 	def __init__(self, timeStepFunc, **state):
