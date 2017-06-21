@@ -31,7 +31,9 @@ def stateFunc(fieldFunc):
 
 		data_vars = dict([(key, (vectorize, dataDict[key])) for key in dataDict.keys()])
 		coords = dict([(key, kwargs[key]) for key in vectorize])
-		return xr.Dataset(data_vars=data_vars, coords=coords)
+		attrs = dict([(key, kwargs[key]) for key in kwargs if key not in vectorize])
+
+		return xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
 	return dataset_wrap
 
 class PDE(object):
