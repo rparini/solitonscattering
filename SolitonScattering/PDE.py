@@ -129,13 +129,10 @@ class PDE(object):
 		# reset the state of the field to the state it was in when the instance was first initilized
 		self.state = self._initialState
 
-	def time_evolve(self, tFin, **timeStepArgs):
-		while self.state['t'] < tFin:
-			# pass the time step function the current state and any additional arguments it needs
-			# by combining the self.state and timeStepArgs dictionaries
-			args = self.state.copy()
-			args.update(timeStepArgs)
-			self.state = self.time_step(**args)
+	def time_evolve(self, tFin, **timeStepArgs):		
+		# pass the time step function the current state and any additional given arguments
+		while getval(self.state, 't') < tFin:
+			self.state = self.time_step(self.state, **timeStepArgs)				
 
 	def plot_state(self, showLims=False, useTex=False):
 		from matplotlib import pyplot as plt
