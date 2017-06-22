@@ -4,7 +4,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log
 from warnings import warn
 
-from .PDE import PDE
+from .PDE import PDE, stateFunc
 
 #### Some useful equations
 solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
@@ -14,12 +14,13 @@ solitonFrequency = lambda l: np.real(l)/np.abs(l)
 #### Exact solutions to the sine-Gordon Eq. ####
 gamma = lambda v: 1 / sqrt(1 - v ** 2)
 
+@stateFunc
 def kink(x, t, v, x0, epsilon=1):
 	# epsilon = \pm 1
 	g = gamma(v)
 	u  = 4*arctan(exp(epsilon*g*(x-x0-v*t)))
 	ut = -2*epsilon*g*v / cosh(epsilon*g*(x-x0-v*t))
-	return {'t':t, 'x':x, 'u':u, 'ut':ut}
+	return {'u':u, 'ut':ut}
 
 
 # def init_magnetic(x, v0, k, x0):
