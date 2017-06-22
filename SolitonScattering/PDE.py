@@ -85,7 +85,7 @@ def timeStepFunc(stepFunc):
 
 
 class PDE(object):
-	def __init__(self, timeStepFunc, **state):
+	def __init__(self, timeStepFunc, state):
 		self.state     = state
 		self._initialState = deepcopy(state)
 		self.time_step = timeStepFunc
@@ -110,20 +110,20 @@ class PDE(object):
 	@state.setter
 	def state(self, stateVal):
 		"""
-		stateVal should be a dict
-		either with {'t', 'x', 'u', 'ut'}
+		stateVal should be an xarray Dataset with data {'u', 'ut'}
 		or {'solName', ...} where 'solName' is the name of a known solution given in get_solutions add the other elements of the 
 			dictionary should be the solArgs required there
 		"""
 		if 'solName' in stateVal:
 			# if a name of a solution is given then use that function name to create the state
 			self._state = self.named_solutions[stateVal.pop('solName')](**stateVal)
-		elif not self.requiredStateKeys or set(stateVal.keys()) == set(self.requiredStateKeys):
+
+		stateValKeys = set(stateVal.data_vars.keys()).union(set(stateVal.attrs)).union(set(stateVal.coords))
+		if not self.requiredStateKeys or set(self.requiredStateKeys).issubset(stateValKeys):
 			# set the time step funciton as the given dictionary
 			self._state = stateVal
 		else:
-			# warn("The given state is not a dictionary with keys:", self.requiredStateKeys)
-			pass
+			raise TypeError("The given state should be an xarray Dataset with data_vars or attributes:", self.requiredStateKeys)
 
 	def reset_state(self):
 		# reset the state of the field to the state it was in when the instance was first initilized
