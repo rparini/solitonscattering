@@ -36,6 +36,55 @@ def stateFunc(fieldFunc):
 		return xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
 	return dataset_wrap
 
+
+def timeStepFunc(stepFunc):
+	def timestep_wrap(state, **timestepKwargs):
+		# figure out what variables we're vectorizing over (only numpy arrays)
+		vectorize = [key for key in timestepKwargs.keys() if isnparray(timestepKwargs[key])]
+
+		# introduce new dimensions to vectorize over
+		for key in timestepKwargs.keys():
+			if key in vectorize:
+				# introduce new dimensions to vectorize over
+				state = xr.concat([state]*len(timestepKwargs[key]), dim=key)
+				state[key] = timestepKwargs[key]
+
+			else:
+				# anything we are not vectorizing over should be an attribute
+				state.attrs[key] = timestepKwargs[key]
+
+		# XXX: save defaults as attributes
+
+		# pass state to the timeStepFunc
+		funcArgs = inspect.getargspec(stepFunc)[0]
+		def getval(key):
+			# get a value whether it is a coordinate, data or attribute
+			if key in state:
+				return state[key]
+			elif key in state.attrs:
+				return state.attrs[key]
+
+		funcArgs = dict((key, getval(key)) for key in funcArgs if getval(key) is not None)
+
+		# take time step
+		newVals = stepFunc(**funcArgs)
+
+		# Update attributes
+		for key in newVals.copy():
+			if key in state.attrs:
+				state.attrs[key] = newVals.pop(key)
+
+		oldSize = [state[key].size for key in newVals]
+		newSize = [newVals[key].size for key in newVals]
+		if np.any(oldSize != newSize):
+			# the size of the state has changed so we need to build a new one
+			state = xr.Dataset(data_vars = dict((key, newVals[key]) for key in state.data_vars.keys()), 
+							   attrs = state.attrs)
+
+		return state
+	return timestep_wrap
+
+
 class PDE(object):
 	def __init__(self, timeStepFunc, **state):
 		self.state     = state
