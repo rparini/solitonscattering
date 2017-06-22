@@ -17,6 +17,13 @@ except ImportError:
 
 isnparray = lambda x: isinstance(x, np.ndarray)
 
+def getval(state, key):
+	# get a value whether it is a coordinate, data or attribute
+	if key in state:
+		return state[key]
+	elif key in state.attrs:
+		return state.attrs[key]
+
 def stateFunc(fieldFunc):
 	def dataset_wrap(*args, **kwargs):
 		# put args in the kwargs
@@ -56,15 +63,7 @@ def timeStepFunc(stepFunc):
 		# XXX: save defaults as attributes
 
 		# pass state to the timeStepFunc
-		funcArgs = inspect.getargspec(stepFunc)[0]
-		def getval(key):
-			# get a value whether it is a coordinate, data or attribute
-			if key in state:
-				return state[key]
-			elif key in state.attrs:
-				return state.attrs[key]
-
-		funcArgs = dict((key, getval(key)) for key in funcArgs if getval(key) is not None)
+		funcArgs = dict((key, getval(state, key)) for key in inspect.getargspec(stepFunc)[0] if getval(state, key) is not None)
 
 		# take time step
 		newVals = stepFunc(**funcArgs)
