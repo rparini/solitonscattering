@@ -3,8 +3,9 @@ import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log
 from warnings import warn
+import xarray as xr
 
-from .PDE import PDE, stateFunc
+from .PDE import PDE, stateFunc, timeStepFunc
 
 #### Some useful equations
 solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
@@ -35,47 +36,58 @@ def kink(x, t, v, x0, epsilon=1):
 
 
 #### Time Stepping Methods ####
+@timeStepFunc
 def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
-	dx = x[1] - x[0]
+	dx = float(x[1] - x[0])
 
 	# save the value of the left and right boundaries for later use
-	uRightOld = u[-1]
-	uLeftOld  = u[0]
+	uRightOld = u[{'x':-1}].copy(deep=True)
+	uLeftOld  = u[{'x':0}].copy(deep=True)
 
 	# u_tt = u_xx - sin(u)
 	# Get u_tt by using a second order central difference formula to calcuate u_xx
-	utt = (np.roll(u,-1) - 2*u + np.roll(u,1))/dx**2 - sin(u)
+	utt = (u.shift(x=-1) - 2*u + u.shift(x=1))/dx**2 - sin(u)
 
 	# Use utt in a simple (Euler) integration routine:
 	ut += dt * utt
 	u  += dt * ut
 
 	# Impose Robin boundary condition at the right hand end
-	if k == inf:
-		# impose Dirichlet boundary condition
-		u[-1] = 0
-	else:
-		u[-1] = u[-2]/(1 + 2*k*dx)
+	u[{'x':-1}] = u[{'x':-2}]/(1 + 2*k*dx)
 
 	# Impose Dirichlet boundary condition at left:
-	u[0] = dirichletValue
+	u[{'x':0}] = dirichletValue
 
 	# Rolling messes ut up at the boundaries so fix here:
-	ut[-1] = (u[-1] - uRightOld) / dt
-	ut[0]  = (u[0]  - uLeftOld ) / dt
+	ut[{'x':-1}] = (u[{'x':-1}] - uRightOld) / dt
+	ut[{'x':0}]  = (u[{'x':0}]  - uLeftOld ) / dt
 
 	if dynamicRange:
 		checkRange = 10
 		# check if there is anything within checkRange spatial points of the left boundary
-		if np.any(abs(u[:checkRange]-dirichletValue) > 1e-4):
+		if np.any(abs(u[{'x':slice(0,checkRange)}]-dirichletValue) > 1e-4):
 			# add another checkRange points on to the end
-			newPoints = np.linspace(x[0] - checkRange*dx, x[0] - dx, checkRange)
+			newPoints = np.linspace(float(x[0]-checkRange*dx), float(x[0]-dx), checkRange)
+
+			# create new data points for the new region
+			newSize = dict([(key, u.sizes[key]) for key in u.sizes]) # copy dictionary
+			newSize['x'] = len(newPoints)
+
+			newCoords = dict([(key, u.coords[key]) for key in u.coords]) # copy dictionary
+			newCoords['x'] = newPoints
+
+			newData = xr.Dataset(data_vars = {'u':(u.dims, dirichletValue*np.ones([newSize[key] for key in u.dims])),
+								  			  'ut':(ut.dims, np.zeros([newSize[key] for key in u.dims]))}, 
+								 coords = newCoords)
 
 			x = np.insert(x, 0, newPoints)
-			u = np.insert(u, 0, dirichletValue*np.ones_like(newPoints))
-			ut = np.insert(ut, 0, np.zeros_like(newPoints))
+			u = xr.concat([newData['u'], u], dim='x')
+			ut = xr.concat([newData['ut'], ut], dim='x')
 
+	# increment time forward a step
 	t += dt
+	
+	# return anything which might have changed
 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
 def euler_magnetic(t, x, u, ut, dt, k, dirichletValue=2*pi):
