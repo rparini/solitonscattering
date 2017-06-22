@@ -51,12 +51,12 @@ def timeStepFunc(stepFunc):
 
 		# introduce new dimensions to vectorize over
 		for key in timestepKwargs.keys():
-			if key in vectorize:
+			if key in vectorize and key not in state.keys():
 				# introduce new dimensions to vectorize over
 				state = xr.concat([state]*len(timestepKwargs[key]), dim=key)
 				state[key] = timestepKwargs[key]
 
-			else:
+			elif key not in state.keys():
 				# anything we are not vectorizing over should be an attribute
 				state.attrs[key] = timestepKwargs[key]
 
