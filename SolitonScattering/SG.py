@@ -348,6 +348,14 @@ class SineGordon(PDE):
 			# plt.show()
 
 			indexLims[index] = lBndry, rBndry
+
+		# put indexLims into an xarray
+		indexLimsCoords = [self.state.coords[name].data for name in self.state.coords if name!='x']
+		indexLimsCoords.append(['L','R'])
+		indexLimsNames = [name for name in self.state.coords if name!='x']
+		indexLimsNames.append('side')
+		indexLims = xr.DataArray(indexLims, indexLimsCoords, indexLimsNames)
+
 		return indexLims
 
 	@property
