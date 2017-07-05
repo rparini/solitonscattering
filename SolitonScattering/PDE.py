@@ -5,6 +5,7 @@ from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf
 from copy import deepcopy
 from warnings import warn
 import inspect
+import math
 import xarray as xr
 
 from . import ODE
@@ -134,19 +135,20 @@ class PDE(object):
 		while getval(self.state, 't') < tFin:
 			self.state = self.time_step(self.state, **timeStepArgs)				
 
-	def plot_state(self, showLims=False, useTex=False):
+	def plot(self, selection={}, showLims=False, useTex=False, ylim=None):
 		from matplotlib import pyplot as plt
 		if useTex:
 			plt.rc('text', usetex=True)
 			plt.rcParams.update({'font.size': 16})
 
 		x, u = [self.state[k] for k in ['x','u']]
-		plt.plot(x, u, label='u')
+
+		self.state['u'][selection].plot()
 		plt.xlim(x[0],x[-1])
 		ax = plt.gca()
 
 		if showLims is not False:
-			iLims = self.indexLims
+			iLims = self.indexLims[selection]
 			xL, xR = x[iLims[0]], x[iLims[1]]
 			ax.set_ylim()
 
@@ -162,12 +164,31 @@ class PDE(object):
 				plt.text(xRAxis-.01, 1.01, '$x_R$', transform=ax.transAxes)
 				ax.axvline(xR, color='k', linestyle='--', linewidth=1)
 
+		if ylim is not None:
+			plt.ylim(ylim[0], ylim[1])
+
+		# mark yticks in mulitples of pi
+		ax = plt.gca()
+		yticks = np.arange(math.floor(ax.get_ylim()[0]/pi)*pi, math.ceil(ax.get_ylim()[1]/pi)*pi, pi)
+
+		def nameticks(tick):
+			multiple = int(round(tick/pi))
+			if multiple == -1:
+				return '$-\pi$'
+			elif multiple == 0:
+				return '0'
+			elif multiple == 1:
+				return '$\pi$'
+			return '$'+str(multiple)+r'\pi$'
+
+		plt.yticks(yticks, list(map(nameticks, yticks)))
+
 		plt.ylabel('$u$')
 		plt.xlabel('$x$')
 
-	def show_state(self, saveFile=None, **kwargs):
+	def show(self, saveFile=None, **kwargs):
 		from matplotlib import pyplot as plt
-		self.plot_state(**kwargs)
+		self.plot(**kwargs)
 		if saveFile:
 			plt.savefig(saveFile, bbox_inches='tight')
 		else:
