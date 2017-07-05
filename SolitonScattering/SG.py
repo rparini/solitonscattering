@@ -4,6 +4,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log
 from warnings import warn
 import xarray as xr
+import math
 
 from .PDE import PDE, stateFunc, timeStepFunc
 
@@ -180,6 +181,25 @@ class SineGordon(PDE):
 		self.named_solutions = {'kink' : kink}
 
 		super(SineGordon, self).__init__(timeStepFunc, **state)
+
+	def setticks(self):
+		# mark yticks in multiples of pi
+		from matplotlib import pyplot as plt
+		ax = plt.gca()
+		yticks = np.arange(math.floor(ax.get_ylim()[0]/pi)*pi, math.ceil(ax.get_ylim()[1]/pi)*pi, pi)
+
+		def nameticks(tick):
+			multiple = int(round(tick/pi))
+			if multiple == -1:
+				return '$-\pi$'
+			elif multiple == 0:
+				return '0'
+			elif multiple == 1:
+				return '$\pi$'
+			return '$'+str(multiple)+r'\pi$'
+
+		plt.yticks(yticks, list(map(nameticks, yticks)))
+
 
 	@property
 	def ux(self):

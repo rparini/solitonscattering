@@ -135,6 +135,9 @@ class PDE(object):
 		while getval(self.state, 't') < tFin:
 			self.state = self.time_step(self.state, **timeStepArgs)				
 
+	def setticks(self):
+		pass
+
 	def plot(self, selection={}, showLims=False, useTex=False, ylim=None):
 		from matplotlib import pyplot as plt
 		if useTex:
@@ -167,21 +170,7 @@ class PDE(object):
 		if ylim is not None:
 			plt.ylim(ylim[0], ylim[1])
 
-		# mark yticks in mulitples of pi
-		ax = plt.gca()
-		yticks = np.arange(math.floor(ax.get_ylim()[0]/pi)*pi, math.ceil(ax.get_ylim()[1]/pi)*pi, pi)
-
-		def nameticks(tick):
-			multiple = int(round(tick/pi))
-			if multiple == -1:
-				return '$-\pi$'
-			elif multiple == 0:
-				return '0'
-			elif multiple == 1:
-				return '$\pi$'
-			return '$'+str(multiple)+r'\pi$'
-
-		plt.yticks(yticks, list(map(nameticks, yticks)))
+		self.setticks()
 
 		plt.ylabel('$u$')
 		plt.xlabel('$x$')
