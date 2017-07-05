@@ -183,16 +183,17 @@ class SineGordon(PDE):
 
 	@property
 	def ux(self):
-		# XXX: use a higher order approx to ux
-		# XXX: should cache ux and reuse if t is the same
+		# get the x derivative of u with a 2nd order central difference formula
+		# with 1st order differences at the boundaries
+		x = self.state['x'].data
+		dx = x[1]-x[0]
 
-		# get the x derivative of u with a 1st order forward difference formula
-		x, u = [self.state[key] for key in ('x','u')]
-		ux = np.diff(u)/np.diff(x)
+		u = self.state['u']
+		xAxis = list(self.state.indexes).index('x')
+		ux = np.gradient(u, dx, edge_order=1, axis=xAxis)
 
-		# add the derivative of the point ux[-1] with a backwards difference formula
-		ux = np.append(ux, (u[-1] - u[-2])/(x[1]-x[0]))
-		return ux
+		# put ux in an xarray
+		return xr.DataArray(ux, u.coords, u.dims)
 
 	def xLax(self, mu):
 		# Return the V in the linear eigenvalue problem Y'(x) = V(x,mu).Y(x)
