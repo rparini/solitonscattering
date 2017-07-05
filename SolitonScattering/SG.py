@@ -294,47 +294,61 @@ class SineGordon(PDE):
 
 	@property
 	def indexLims(self):
-		# values of the field index at which the field and its derivatives are suitably small
-		x, u, ut = self.state['x'], self.state['u'], self.state['ut']
-		uerr = np.abs(u-2*pi*np.round(u/(2*pi)))
-		uterr = np.abs(ut)
-		uxerr = np.abs(self.ux)
+		# get the values of the x index to the left and right of any soliton content
+		# at which the field and its derivatives are suitably small
+		x, u, ut, ux = self.state['x'], self.state['u'], self.state['ut'], self.ux
 
-		# get the regions to the right and left of anything 'interesting'
-		uerrOk = np.where(uerr<1e-1, np.ones_like(x), np.zeros_like(x))
-		uerrOkIndicies = np.where(uerr<1e-1)[0]
+		axisNames = list(self.state.indexes)
+		axisShape = self.state['u'].shape
 
-		if uerrOk[0] == 1:
-			lRegionIndicies = (int(uerrOkIndicies[0]), int(np.where(np.diff(uerrOk)<0)[0][0]))
-		else:
-			lRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][0]+1), int(np.where(np.diff(uerrOk)<0)[0][0]))
+		# create array to put the index lims into
+		indexLimsShape = [shape for i, shape in enumerate(axisShape) if axisNames[i] != 'x']
+		indexLimsShape.append(2)
+		indexLims = np.zeros(indexLimsShape, dtype=int)
 
-		if uerrOk[-1] == 1:
-			rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
-		else:
-			rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+		for index, dummy in np.ndenumerate(self.state['u'][{'x':0}]):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(axisNames) if key!='x'])
 
-		# within these regions find the minimum of the error function
-		# XXX: make a more considered choice for the error function, perhaps involving x
-		errfunc = uerr+uterr+uxerr
+			uerr = np.abs(u[indexDict]-2*pi*np.round(u[indexDict]/(2*pi)))
+			uterr = np.abs(ut[indexDict])
+			uxerr = np.abs(ux[indexDict])
 
-		lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]])
-		rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]])
+			# get the regions to the right and left of anything 'interesting'
+			uerrOk = np.where(uerr<1e-1, np.ones_like(x), np.zeros_like(x))
+			uerrOkIndicies = np.where(uerr<1e-1)[0]
 
-		# import matplotlib.pyplot as plt
-		# ax = plt.gca()
-		# plt.plot(x,u)
-		# plt.plot(x,uerrOk)
-		# ax.axvline(x[lRegionIndicies[0]])
-		# ax.axvline(x[lRegionIndicies[1]])
-		# ax.axvline(x[rRegionIndicies[0]])
-		# ax.axvline(x[rRegionIndicies[1]])
-		# plt.plot(x,errfunc)
-		# ax.axvline(x[lBndry], color='k')
-		# ax.axvline(x[rBndry], color='k')
-		# plt.show()
+			if uerrOk[0] == 1:
+				lRegionIndicies = (int(uerrOkIndicies[0]), int(np.where(np.diff(uerrOk)<0)[0][0]))
+			else:
+				lRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][0]+1), int(np.where(np.diff(uerrOk)<0)[0][0]))
 
-		return lBndry, rBndry
+			if uerrOk[-1] == 1:
+				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
+			else:
+				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+
+			# within these regions find the minimum of the error function
+			# XXX: make a more considered choice for the error function, perhaps involving x
+			errfunc = uerr+uterr+uxerr
+
+			lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]])
+			rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]])
+
+			# import matplotlib.pyplot as plt
+			# ax = plt.gca()
+			# plt.plot(x,u[{'k':1}])
+			# plt.plot(x,uerrOk)
+			# ax.axvline(x[lRegionIndicies[0]])
+			# ax.axvline(x[lRegionIndicies[1]])
+			# ax.axvline(x[rRegionIndicies[0]])
+			# ax.axvline(x[rRegionIndicies[1]])
+			# plt.plot(x,errfunc)
+			# ax.axvline(x[lBndry], color='k')
+			# ax.axvline(x[rBndry], color='k')
+			# plt.show()
+
+			indexLims[index] = lBndry, rBndry
+		return indexLims
 
 	@property
 	def charge(self):
