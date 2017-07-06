@@ -314,7 +314,7 @@ class SineGordon(PDE):
 			W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
 
 			roots[indexDict], multiplicities[indexDict] = C.findRoots(W, guessRootSymmetry=rootSymmetry,
-				absTol=1e-4, relTol=1e-4)
+				absTol=1e-3, relTol=1e-3)
 
 		return roots
 
