@@ -91,80 +91,80 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	# return anything which might have changed
 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
-def euler_magnetic(t, x, u, ut, dt, k, dirichletValue=2*pi):
-	dx = x[1] - x[0]
+# def euler_magnetic(t, x, u, ut, dt, k, dirichletValue=2*pi):
+# 	dx = x[1] - x[0]
 
-	# save the value of the left and right boundaries for later use
-	uRightOld = u[-1]
-	uLeftOld  = u[0]
+# 	# save the value of the left and right boundaries for later use
+# 	uRightOld = u[-1]
+# 	uLeftOld  = u[0]
 
-	# u_tt = u_xx - sin(u)
-	# Get u_tt by using a second order central difference formula to calcuate u_xx
-	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
+# 	# u_tt = u_xx - sin(u)
+# 	# Get u_tt by using a second order central difference formula to calcuate u_xx
+# 	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
 
-	# Use utt in a simple (Euler) integration routine:
-	ut += dt * utt
-	u  += dt * ut
+# 	# Use utt in a simple (Euler) integration routine:
+# 	ut += dt * utt
+# 	u  += dt * ut
 
-	# Impose magnetic boundary condition at the right hand end
-	u[-1] = k*dx + u[-2]
+# 	# Impose magnetic boundary condition at the right hand end
+# 	u[-1] = k*dx + u[-2]
 
-	# Impose Dirichlet boundary condition at left:
-	u[0] = dirichletValue
+# 	# Impose Dirichlet boundary condition at left:
+# 	u[0] = dirichletValue
 
-	# Rolling messes ut up at the boundaries so fix here:
-	ut[-1]  = (u[-1] - uRightOld)/dt
-	ut[0]   = (u[0] - uLeftOld)/dt
+# 	# Rolling messes ut up at the boundaries so fix here:
+# 	ut[-1]  = (u[-1] - uRightOld)/dt
+# 	ut[0]   = (u[0] - uLeftOld)/dt
 
-	t += dt
-	return {'t':t, 'x':x, 'u':u, 'ut':ut}
+# 	t += dt
+# 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
-def euler_integrable(t, x, u, ut, dt, k, dirichletValue=2*pi):
-	dx = x[1] - x[0]
+# def euler_integrable(t, x, u, ut, dt, k, dirichletValue=2*pi):
+# 	dx = x[1] - x[0]
 
-	# save the value of the left and right boundaries for later use
-	uRightOld = u[-1]
-	uLeftOld  = u[0]
+# 	# save the value of the left and right boundaries for later use
+# 	uRightOld = u[-1]
+# 	uLeftOld  = u[0]
 
-	# u_tt = u_xx - sin(u)
-	# Get u_tt by using a second order central difference formula to calcuate u_xx
-	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
+# 	# u_tt = u_xx - sin(u)
+# 	# Get u_tt by using a second order central difference formula to calcuate u_xx
+# 	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
 
-	# Use utt in a simple (Euler) integration routine:
-	ut += dt * utt
-	u  += dt * ut
+# 	# Use utt in a simple (Euler) integration routine:
+# 	ut += dt * utt
+# 	u  += dt * ut
 
-	# Impose one parameter integrable boundary condition at the right hand end
-	# ux + 4 k sin(u/2) = 0
-	# u[-1] + 4hk sin(u[-1]/2) = u[-2]
-	# solve boundary condition with newton method
-	u0 = u[-1]
-	error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
-	tol = 10 ** -20
+# 	# Impose one parameter integrable boundary condition at the right hand end
+# 	# ux + 4 k sin(u/2) = 0
+# 	# u[-1] + 4hk sin(u[-1]/2) = u[-2]
+# 	# solve boundary condition with newton method
+# 	u0 = u[-1]
+# 	error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
+# 	tol = 10 ** -20
 
-	i = 0
-	while error > tol:
-		# print u0, error
-		N = 2*dx*k * (u0*cos(u0/2) - 2*sin(u0/2)) + u[-2]
-		D = 1 + 2*dx*k * cos(u0/2)
-		u0 = N/D
+# 	i = 0
+# 	while error > tol:
+# 		# print u0, error
+# 		N = 2*dx*k * (u0*cos(u0/2) - 2*sin(u0/2)) + u[-2]
+# 		D = 1 + 2*dx*k * cos(u0/2)
+# 		u0 = N/D
 
-		error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
-		i += 1
+# 		error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
+# 		i += 1
 
-		if i > 500 and error < 10 ** -10:
-			u[-1] = u0
+# 		if i > 500 and error < 10 ** -10:
+# 			u[-1] = u0
 
-	# Impose Dirichlet boundary condition at left:
-	u[0] = dirichletValue
+# 	# Impose Dirichlet boundary condition at left:
+# 	u[0] = dirichletValue
 
-	# Rolling messes ut up at the boundaries so fix here:
-	ut[-1]  = (u[-1]  - uRightOld ) / dt
-	ut[0]   = (u[0]  - uLeftOld ) / dt
+# 	# Rolling messes ut up at the boundaries so fix here:
+# 	ut[-1]  = (u[-1]  - uRightOld ) / dt
+# 	ut[0]   = (u[0]  - uLeftOld ) / dt
 
 
-	t += dt
-	return {'t':t, 'x':x, 'u':u, 'ut':ut}
+# 	t += dt
+# 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
 
 
