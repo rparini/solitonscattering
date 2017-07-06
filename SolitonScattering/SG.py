@@ -175,9 +175,10 @@ class SineGordon(PDE):
 			and returns the state of the field at time t+dt or a string which is the key in named_timeStepFunc
 		"""
 		self.requiredStateKeys = ['t', 'x', 'u', 'ut'] # everything needed to evolve sine-Gordon one step in time
-		self.named_timeStepFuncs = {'eulerRobin': euler_robin,
-								   'eulerMagnetic': euler_magnetic,
-								   'eulerIntegrable': euler_integrable}
+		self.named_timeStepFuncs = {'eulerRobin': euler_robin}
+		# self.named_timeStepFuncs = {'eulerRobin': euler_robin,
+		# 						   'eulerMagnetic': euler_magnetic,
+		# 						   'eulerIntegrable': euler_integrable}
 		self.named_solutions = {'kink' : kink}
 
 		super(SineGordon, self).__init__(timeStepFunc, **state)
