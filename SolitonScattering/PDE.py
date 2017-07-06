@@ -50,6 +50,13 @@ def stateFunc(fieldFunc):
 
 def timeStepFunc(stepFunc):
 	def timestep_wrap(state, **timestepKwargs):
+		# include defaults explicitly
+		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
+		defaults = inspect.getargspec(stepFunc)[3]
+		tempkwargs = dict((key, defaults[i]) for i, key in enumerate(inspect.getargspec(stepFunc)[0][-len(defaults):]))
+		tempkwargs.update(timestepKwargs)
+		timestepKwargs = tempkwargs
+
 		# figure out what variables we're vectorizing over (only numpy arrays)
 		vectorize = [key for key in timestepKwargs.keys() if isnparray(timestepKwargs[key])]
 
