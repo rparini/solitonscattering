@@ -227,9 +227,7 @@ class PDE(object):
 		def update_animation(i):
 			for k in range(skipFrames+1):
 				# step the time evolution forward
-				args = self.state.copy()
-				args.update(timeStepArgs)
-				self.state = self.time_step(**args)
+				self.state = self.time_step(self.state, **timeStepArgs)
 
 			line.set_data(self.state['x'], self.state['u'])
 			timeLabel.set_text('Time = %.1f' % self.state['t'])
