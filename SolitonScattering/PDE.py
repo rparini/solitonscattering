@@ -53,16 +53,16 @@ def timeStepFunc(stepFunc):
 		# figure out what variables we're vectorizing over (only numpy arrays)
 		vectorize = [key for key in timestepKwargs.keys() if isnparray(timestepKwargs[key])]
 
-		# introduce new dimensions to vectorize over
 		for key in timestepKwargs.keys():
-			if key in vectorize and key not in state.keys():
-				# introduce new dimensions to vectorize over
-				state = xr.concat([state]*len(timestepKwargs[key]), dim=key)
-				state[key] = timestepKwargs[key]
+			if key not in state.keys():
+				if key in vectorize:
+					# introduce new dimensions to vectorize over
+					state = xr.concat([state]*len(timestepKwargs[key]), dim=key)
+					state[key] = timestepKwargs[key]
 
-			elif key not in state.keys():
-				# anything we are not vectorizing over should be an attribute
-				state.attrs[key] = timestepKwargs[key]
+				else:
+					# anything we are not vectorizing over should be an attribute
+					state.attrs[key] = timestepKwargs[key]
 
 		# XXX: save defaults as attributes
 
