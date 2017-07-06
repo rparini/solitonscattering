@@ -198,19 +198,21 @@ class PDE(object):
 		else:
 			plt.show()
 
-	def save_animation(self, saveFile, tFin, fps = 60, writer = None, dpi = 200, codec = None, **timeStepArgs):
+	def save_animation(self, saveFile, tFin, ylim=None, fps = 60, writer = None, dpi = 200, codec = None, **timeStepArgs):
 		frames = int(tFin / timeStepArgs['dt'])
 		saveAnimationDict = {'filename':saveFile, 'fps':fps, 'frames':frames, 'writer':writer, 'dpi':dpi, 'codec':codec}
-		self.show_animation(saveAnimationDict = saveAnimationDict, **timeStepArgs)
+		self.show_animation(ylim=ylim, saveAnimationDict = saveAnimationDict, **timeStepArgs)
 
-	def show_animation(self, skipFrames = 0, saveAnimationDict = {}, **timeStepArgs):
+	def show_animation(self, skipFrames = 0, ylim=None, saveAnimationDict = {}, **timeStepArgs):
 		from matplotlib import pyplot as plt
 		from matplotlib import animation
 
 		fig = plt.figure()
 		ax = plt.axes(xlim=(self.state['x'][0], self.state['x'][-1]), ylim=(-2, 10))
 		line, = ax.plot([], [])
-		plt.yrange = [-8,8]
+		if ylim is not None:
+			plt.yrange = ylim
+		self.setticks()
 
 		timeLabel = ax.text(0.05, 0.9, '', transform=ax.transAxes)
 
