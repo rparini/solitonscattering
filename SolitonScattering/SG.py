@@ -78,7 +78,7 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 			newCoords['x'] = newPoints
 
 			newData = xr.Dataset(data_vars = {'u':(u.dims, dirichletValue*np.ones([newSize[key] for key in u.dims])),
-								  			  'ut':(ut.dims, np.zeros([newSize[key] for key in u.dims]))}, 
+								  			  'ut':(ut.dims, np.zeros([newSize[key] for key in ut.dims]))}, 
 								 coords = newCoords)
 
 			x = np.insert(x, 0, newPoints)
