@@ -350,7 +350,11 @@ class SineGordon(PDE):
 			if uerrOk[-1] == 1:
 				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
 			else:
-				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+				if np.where(np.diff(uerrOk)>0)[0]:
+					rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+				else:
+					# just take the right most point
+					rRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][-1]), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
 
 			# within these regions find the minimum of the error function
 			# XXX: make a more considered choice for the error function, perhaps involving x
