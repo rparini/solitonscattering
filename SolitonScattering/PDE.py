@@ -4,6 +4,9 @@ import scipy
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf
 from copy import deepcopy
 from warnings import warn
+import inspect
+import math
+import xarray as xr
 
 from . import ODE
 
@@ -13,8 +16,92 @@ try:
 except ImportError:
 	warn('Unable to import matplotlib')
 
+isnparray = lambda x: isinstance(x, np.ndarray)
+
+def getval(state, key):
+	# get a value whether it is a coordinate, data or attribute
+	if key in state:
+		return state[key]
+	elif key in state.attrs:
+		return state.attrs[key]
+
+def stateFunc(fieldFunc):
+	def dataset_wrap(*args, **kwargs):
+		# include defaults explicitly in the kwargs
+		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
+		defaults = inspect.getargspec(fieldFunc)[3]
+		tempkwargs = dict((key, defaults[i]) for i, key in enumerate(inspect.getargspec(fieldFunc)[0][-len(defaults):]))
+		tempkwargs.update(kwargs)
+		kwargs = tempkwargs
+
+		# put args in the kwargs
+		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
+		kwargs.update(zip(inspect.getargspec(fieldFunc)[0], args))
+
+		# figure out what variables we're vectorizing over (only numpy arrays)
+		vectorize = [key for key in kwargs.keys() if isnparray(kwargs[key])]
+
+		# make vectorized arguments into coordinate arrays
+		coords = dict((key, xr.DataArray(kwargs[key], coords=[kwargs[key]], dims=[key])) for key in vectorize)
+		kwargs.update(coords)
+
+		# get u, ut ect. from the given function
+		dataDict = fieldFunc(**kwargs)
+
+		state = xr.Dataset(dataDict)
+		state.attrs = dict([(key, kwargs[key]) for key in kwargs if key not in vectorize])
+		return state
+
+	return dataset_wrap
+
+
+def timeStepFunc(stepFunc):
+	def timestep_wrap(state, **timestepKwargs):
+		# include defaults explicitly
+		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
+		defaults = inspect.getargspec(stepFunc)[3]
+		tempkwargs = dict((key, defaults[i]) for i, key in enumerate(inspect.getargspec(stepFunc)[0][-len(defaults):]))
+		tempkwargs.update(timestepKwargs)
+		timestepKwargs = tempkwargs
+
+		# figure out what variables we're vectorizing over (only numpy arrays)
+		vectorize = [key for key in timestepKwargs.keys() if isnparray(timestepKwargs[key])]
+
+		for key in timestepKwargs.keys():
+			if key not in state.keys():
+				if key in vectorize:
+					# introduce new dimensions to vectorize over
+					state = xr.concat([state]*len(timestepKwargs[key]), dim=key)
+					state[key] = timestepKwargs[key]
+
+				else:
+					# anything we are not vectorizing over should be an attribute
+					state.attrs[key] = timestepKwargs[key]
+
+		# pass state to the timeStepFunc
+		funcArgs = dict((key, getval(state, key)) for key in inspect.getargspec(stepFunc)[0] if getval(state, key) is not None)
+
+		# take time step
+		newVals = stepFunc(**funcArgs)
+
+		# Update attributes
+		for key in newVals.copy():
+			if key in state.attrs:
+				state.attrs[key] = newVals.pop(key)
+
+		oldSize = [state[key].size for key in newVals]
+		newSize = [newVals[key].size for key in newVals]
+		if np.any(oldSize != newSize):
+			# the size of the state has changed so we need to build a new one
+			state = xr.Dataset(data_vars = dict((key, newVals[key]) for key in state.data_vars.keys()), 
+							   attrs = state.attrs)
+
+		return state
+	return timestep_wrap
+
+
 class PDE(object):
-	def __init__(self, timeStepFunc, **state):
+	def __init__(self, timeStepFunc, state):
 		self.state     = state
 		self._initialState = deepcopy(state)
 		self.time_step = timeStepFunc
@@ -39,46 +126,47 @@ class PDE(object):
 	@state.setter
 	def state(self, stateVal):
 		"""
-		stateVal should be a dict
-		either with {'t', 'x', 'u', 'ut'}
+		stateVal should be an xarray Dataset with data {'u', 'ut'}
 		or {'solName', ...} where 'solName' is the name of a known solution given in get_solutions add the other elements of the 
 			dictionary should be the solArgs required there
 		"""
 		if 'solName' in stateVal:
 			# if a name of a solution is given then use that function name to create the state
 			self._state = self.named_solutions[stateVal.pop('solName')](**stateVal)
-		elif not self.requiredStateKeys or set(stateVal.keys()) == set(self.requiredStateKeys):
+
+		stateValKeys = set(stateVal.data_vars.keys()).union(set(stateVal.attrs)).union(set(stateVal.coords))
+		if not self.requiredStateKeys or set(self.requiredStateKeys).issubset(stateValKeys):
 			# set the time step funciton as the given dictionary
 			self._state = stateVal
 		else:
-			# warn("The given state is not a dictionary with keys:", self.requiredStateKeys)
-			pass
+			raise TypeError("The given state should be an xarray Dataset with data_vars or attributes:", self.requiredStateKeys)
 
 	def reset_state(self):
 		# reset the state of the field to the state it was in when the instance was first initilized
 		self.state = self._initialState
 
-	def time_evolve(self, tFin, **timeStepArgs):
-		while self.state['t'] < tFin:
-			# pass the time step function the current state and any additional arguments it needs
-			# by combining the self.state and timeStepArgs dictionaries
-			args = self.state.copy()
-			args.update(timeStepArgs)
-			self.state = self.time_step(**args)
+	def time_evolve(self, tFin, **timeStepArgs):		
+		# pass the time step function the current state and any additional given arguments
+		while getval(self.state, 't') < tFin:
+			self.state = self.time_step(self.state, **timeStepArgs)				
 
-	def plot_state(self, showLims=False, useTex=False):
+	def setticks(self):
+		pass
+
+	def plot(self, selection={}, showLims=False, useTex=False, ylim=None):
 		from matplotlib import pyplot as plt
 		if useTex:
 			plt.rc('text', usetex=True)
 			plt.rcParams.update({'font.size': 16})
 
 		x, u = [self.state[k] for k in ['x','u']]
-		plt.plot(x, u, label='u')
+
+		self.state['u'][selection].plot()
 		plt.xlim(x[0],x[-1])
 		ax = plt.gca()
 
 		if showLims is not False:
-			iLims = self.indexLims
+			iLims = self.indexLims[selection]
 			xL, xR = x[iLims[0]], x[iLims[1]]
 			ax.set_ylim()
 
@@ -94,30 +182,37 @@ class PDE(object):
 				plt.text(xRAxis-.01, 1.01, '$x_R$', transform=ax.transAxes)
 				ax.axvline(xR, color='k', linestyle='--', linewidth=1)
 
+		if ylim is not None:
+			plt.ylim(ylim[0], ylim[1])
+
+		self.setticks()
+
 		plt.ylabel('$u$')
 		plt.xlabel('$x$')
 
-	def show_state(self, saveFile=None, **kwargs):
+	def show(self, saveFile=None, **kwargs):
 		from matplotlib import pyplot as plt
-		self.plot_state(**kwargs)
+		self.plot(**kwargs)
 		if saveFile:
 			plt.savefig(saveFile, bbox_inches='tight')
 		else:
 			plt.show()
 
-	def save_animation(self, saveFile, tFin, fps = 60, writer = None, dpi = 200, codec = None, **timeStepArgs):
+	def save_animation(self, saveFile, tFin, ylim=None, fps = 60, writer = None, dpi = 200, codec = None, **timeStepArgs):
 		frames = int(tFin / timeStepArgs['dt'])
 		saveAnimationDict = {'filename':saveFile, 'fps':fps, 'frames':frames, 'writer':writer, 'dpi':dpi, 'codec':codec}
-		self.show_animation(saveAnimationDict = saveAnimationDict, **timeStepArgs)
+		self.show_animation(ylim=ylim, saveAnimationDict = saveAnimationDict, **timeStepArgs)
 
-	def show_animation(self, skipFrames = 0, saveAnimationDict = {}, **timeStepArgs):
+	def show_animation(self, skipFrames = 0, ylim=None, saveAnimationDict = {}, **timeStepArgs):
 		from matplotlib import pyplot as plt
 		from matplotlib import animation
 
 		fig = plt.figure()
 		ax = plt.axes(xlim=(self.state['x'][0], self.state['x'][-1]), ylim=(-2, 10))
 		line, = ax.plot([], [])
-		plt.yrange = [-8,8]
+		if ylim is not None:
+			plt.yrange = ylim
+		self.setticks()
 
 		timeLabel = ax.text(0.05, 0.9, '', transform=ax.transAxes)
 
@@ -132,9 +227,7 @@ class PDE(object):
 		def update_animation(i):
 			for k in range(skipFrames+1):
 				# step the time evolution forward
-				args = self.state.copy()
-				args.update(timeStepArgs)
-				self.state = self.time_step(**args)
+				self.state = self.time_step(self.state, **timeStepArgs)
 
 			line.set_data(self.state['x'], self.state['u'])
 			timeLabel.set_text('Time = %.1f' % self.state['t'])
@@ -143,7 +236,7 @@ class PDE(object):
 		# call the animator
 		frames = saveAnimationDict.pop('frames', None)
 		if frames is not None:
-			frames = saveAnimationDict.pop('frames', None)//(skipFrames+1)
+			frames = frames//(skipFrames+1)
 		anim = animation.FuncAnimation(fig, update_animation, init_func=init, interval=20, blit=True, frames=frames)
 
 		if saveAnimationDict:
@@ -160,76 +253,102 @@ class PDE(object):
 		# return the asymptotic value of the bound state eigenfunction as x -> +inf
 		raise NotImplementedError('Implement right_asyptotic_eigenfunction in a child class')		
 
-	def eigenfunction_right(self, mu, ODEIntMethod='CRungeKuttaArray'):
+	def eigenfunction_right(self, muList, ODEIntMethod='CRungeKuttaArray', selection={}):
 		import matplotlib.pyplot as plt
-		x, u = self.state['x'], self.state['u']
+		x, u = self.state['x'], self.state['u'][selection]
+		indexLims = self.indexLims[selection]
 
-		xLIndex = 0
-		xRIndex = len(x)-1
+		# muList should be a list
+		if not hasattr(muList, '__iter__'):
+			muList = [muList]
 
-		x = x[xLIndex:xRIndex+1]
-		h = x[1] - x[0]
-		xL, xR = x[0], x[-1]
-		yBoundL = self.left_asyptotic_eigenfunction(mu, xL)
+		axisShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
 
-		V = self.xLax(mu)[xLIndex:xRIndex+1]
-		if ODEIntMethod == 'CRungeKuttaArray':
-			yR = ODE.CRungeKuttaArray(2*h, yBoundL, V)
-		elif ODEIntMethod == 'RungeKuttaArray':
-			yR = ODE.RungeKuttaArray(2*h, yBoundL, V)[-1]
+		# create yR as an empty DataArray
+		yRCoords = dict((key, u.coords[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		yRCoords['mu'] = muList
+		yRDims = list(yRCoords.keys())
+		yRDims.append('yRi')
+		yRShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		yRShape.append(len(muList))
+		yRShape.append(2)
+
+		yR = np.zeros(yRShape, dtype=np.complex128)
+		yR = xr.DataArray(yR, coords=yRCoords, dims=yRDims)
+
+		VFull = self.xLax(muList, selection=selection)
+
+		for index, dummy in np.ndenumerate(np.empty(axisShape)):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(self.state.coords) if key!='x' and len(u[key].shape)>0])
+			xLIndex, xRIndex = map(int, indexLims[indexDict])
+			x = self.state['x'][xLIndex:xRIndex+1]
+			h = float(x[1] - x[0])
+			xL, xR = x[0], x[-1]
+
+			# get yBoundL and reorder
+			yBoundL = self.left_asyptotic_eigenfunction(muList, xL)
+			yBoundL = yBoundL.transpose('mu', 'Phii')
+
+			for muindex, mu in enumerate(muList):
+				# reorder V and cast as a numpy array 
+				V = np.zeros((len(x),2,2), dtype=np.complex128)
+				V[:] = VFull[indexDict][{'x':slice(xLIndex, xRIndex+1)}][{'mu':muindex}].transpose('x','Vi','Vj').values
+
+				yBoundL_mu = np.zeros(2, dtype=np.complex128)
+				yBoundL_mu[:] = yBoundL[{'mu':muindex}].values
+
+				# solve for the Jost eigenfunction which at xL matches the left asymptotic eigenfunction
+				# note that stepsize for Runge Kutta 4th order is 2h since it requires midpoint values
+				if ODEIntMethod == 'CRungeKuttaArray':
+					yR[indexDict][{'mu':muindex}] = ODE.CRungeKuttaArray(2*h, yBoundL_mu, V)
+				elif ODEIntMethod == 'RungeKuttaArray':
+					yR[indexDict][{'mu':muindex}] = ODE.RungeKuttaArray(2*h, yBoundL_mu, V)[-1]
 
 		return yR
 
-	def eigenfunction_wronskian(self, mu, ODEIntMethod='CRungeKuttaArray'):
+	def eigenfunction_wronskian(self, mu, ODEIntMethod='CRungeKuttaArray', selection={}):
 		# solve for the eigenfunction across x as an intial value problem
 		# at x[0] the eigenfunction is yBoundL = self.left_asyptotic_eigenfunction(mu)
 		# solve for the value of the eigenfunction at x[-1], yR
+		yR = self.eigenfunction_right(mu, ODEIntMethod, selection)
 
-		x = self.state['x']
-
-		# XXX: need to fix xRIndex based on 'smoothness' of the field at xR
-		xLIndex = 0
-		xRIndex = len(x)-1
-
-		xL, xR = x[xLIndex], x[xRIndex]
-
-		fullx = self.state['x']
-		h = fullx[1] - fullx[0]
-
-		# XXX: At the moment the fastest way to take a vector of mu is to just loop over mu.
-		# if mu is not given as an array make it an array of length 1
+		# mu is assumed to be a list
 		if not hasattr(mu, '__iter__'):
-			mu = np.array([mu])
+			mu = [mu]
 
-		# get initial condition y(xL)
-		yBoundL = self.left_asyptotic_eigenfunction(mu, xL)
+		u = self.state['u'][selection]
 
-		# get xLax in the interval [xL, xR] with spacing h
-		# V.shape = (#values of mu, #points x, size of lax pair, size of lax pair)
-		V = self.xLax(mu)[xLIndex:xRIndex+1]
+		# create wronskian, W, as an empty DataArray
+		WCoords = dict((key, u.coords[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		WCoords['mu'] = mu
+		WDims = list(WCoords.keys())
+		WShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		WShape.append(len(mu))
 
-		# solve for the Jost eigenfunction which at xL matches the left asymptotic eigenfunction
-		# note that stepsize for Runge Kutta 4th order is 2h since it requires midpoint values
-		if ODEIntMethod == 'CRungeKuttaArray':
-			yR = np.array([ODE.CRungeKuttaArray(2*h, yBoundL[i], V[i]) for i in range(len(mu))])
-		elif ODEIntMethod == 'RungeKuttaArray':
-			yR = np.array([ODE.RungeKuttaArray(2*h, yBoundL[i], V[i])[-1] for i in range(len(mu))])
+		W = np.zeros(WShape, dtype=np.complex128)
+		W = xr.DataArray(W, WCoords, WDims)
 
-		# M is the number of steps acually taken by Runge Kutta
-		M = (V.shape[1]-1)//2
+		# iterate over all axis except mu
+		axisShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		for index, dummy in np.ndenumerate(np.empty(axisShape)):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(self.state.coords) if key!='x' and len(u[key].shape)>0])
+			
+			xLIndex, xRIndex = map(int, self.indexLims[selection][indexDict])
+			x = self.state['x'][xLIndex: xRIndex+1]
+			h = float(x[1] - x[0])
+			xL, xR = x[0], x[-1]
 
-		# so that the real xR is
-		xR = xL + 2*h*M
+			# M is the number of steps acually taken by Runge Kutta
+			M = (len(x)-1)//2
 
-		# calculate the wronskian of the eigenfunction we solve for and
-		# the bound sate eigenfunction
-		yBoundR = self.right_asyptotic_eigenfunction(mu, xR)
-		W = yR[:,0]*yBoundR[:,1] - yR[:,1]*yBoundR[:,0]
+			# so that the real xR is
+			xR = xL + 2*h*M
 
-		if len(W) == 1:
-			return W[0]
-		else:
-			return W
+			# calculate the wronskian of the eigenfunction we solve for and the bound sate eigenfunction
+			yBoundR = self.right_asyptotic_eigenfunction(mu, xR)
+			W[indexDict] = yR[indexDict][{'yRi':0}]*yBoundR[{'Phii':1}] - yR[indexDict][{'yRi':1}]*yBoundR[{'Phii':0}]
+
+		return W
 
 	def show_eigenfunction(self, mu):
 		import matplotlib.pyplot as plt

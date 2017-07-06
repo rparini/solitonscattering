@@ -3,8 +3,10 @@ import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log
 from warnings import warn
+import xarray as xr
+import math
 
-from .PDE import PDE
+from .PDE import PDE, stateFunc, timeStepFunc
 
 #### Some useful equations
 solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
@@ -14,12 +16,13 @@ solitonFrequency = lambda l: np.real(l)/np.abs(l)
 #### Exact solutions to the sine-Gordon Eq. ####
 gamma = lambda v: 1 / sqrt(1 - v ** 2)
 
+@stateFunc
 def kink(x, t, v, x0, epsilon=1):
 	# epsilon = \pm 1
 	g = gamma(v)
 	u  = 4*arctan(exp(epsilon*g*(x-x0-v*t)))
 	ut = -2*epsilon*g*v / cosh(epsilon*g*(x-x0-v*t))
-	return {'t':t, 'x':x, 'u':u, 'ut':ut}
+	return {'u':u, 'ut':ut}
 
 
 # def init_magnetic(x, v0, k, x0):
@@ -34,123 +37,134 @@ def kink(x, t, v, x0, epsilon=1):
 
 
 #### Time Stepping Methods ####
+@timeStepFunc
 def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
-	dx = x[1] - x[0]
+	dx = float(x[1] - x[0])
 
 	# save the value of the left and right boundaries for later use
-	uRightOld = u[-1]
-	uLeftOld  = u[0]
+	uRightOld = u[{'x':-1}].copy(deep=True)
+	uLeftOld  = u[{'x':0}].copy(deep=True)
 
 	# u_tt = u_xx - sin(u)
 	# Get u_tt by using a second order central difference formula to calcuate u_xx
-	utt = (np.roll(u,-1) - 2*u + np.roll(u,1))/dx**2 - sin(u)
+	utt = (u.shift(x=-1) - 2*u + u.shift(x=1))/dx**2 - sin(u)
 
 	# Use utt in a simple (Euler) integration routine:
 	ut += dt * utt
 	u  += dt * ut
 
 	# Impose Robin boundary condition at the right hand end
-	if k == inf:
-		# impose Dirichlet boundary condition
-		u[-1] = 0
-	else:
-		u[-1] = u[-2]/(1 + 2*k*dx)
+	u[{'x':-1}] = u[{'x':-2}]/(1 + 2*k*dx)
 
 	# Impose Dirichlet boundary condition at left:
-	u[0] = dirichletValue
+	u[{'x':0}] = dirichletValue
 
 	# Rolling messes ut up at the boundaries so fix here:
-	ut[-1] = (u[-1] - uRightOld) / dt
-	ut[0]  = (u[0]  - uLeftOld ) / dt
+	ut[{'x':-1}] = (u[{'x':-1}] - uRightOld) / dt
+	ut[{'x':0}]  = (u[{'x':0}]  - uLeftOld ) / dt
 
 	if dynamicRange:
 		checkRange = 10
 		# check if there is anything within checkRange spatial points of the left boundary
-		if np.any(abs(u[:checkRange]-dirichletValue) > 1e-4):
+		if np.any(abs(u[{'x':slice(0,checkRange)}]-dirichletValue) > 1e-4):
 			# add another checkRange points on to the end
-			newPoints = np.linspace(x[0] - checkRange*dx, x[0] - dx, checkRange)
+			newPoints = np.linspace(float(x[0]-checkRange*dx), float(x[0]-dx), checkRange)
+
+			# create new data points for the new region
+			newSize = dict([(key, u.sizes[key]) for key in u.sizes]) # copy dictionary
+			newSize['x'] = len(newPoints)
+
+			newCoords = dict([(key, u.coords[key]) for key in u.coords]) # copy dictionary
+			newCoords['x'] = newPoints
+
+			newData = xr.Dataset(data_vars = {'u':(u.dims, dirichletValue*np.ones([newSize[key] for key in u.dims])),
+								  			  'ut':(ut.dims, np.zeros([newSize[key] for key in ut.dims]))}, 
+								 coords = newCoords)
 
 			x = np.insert(x, 0, newPoints)
-			u = np.insert(u, 0, dirichletValue*np.ones_like(newPoints))
-			ut = np.insert(ut, 0, np.zeros_like(newPoints))
+			u = xr.concat([newData['u'], u], dim='x')
+			ut = xr.concat([newData['ut'], ut], dim='x')
 
+	# increment time forward a step
 	t += dt
+	
+	# return anything which might have changed
 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
-def euler_magnetic(t, x, u, ut, dt, k, dirichletValue=2*pi):
-	dx = x[1] - x[0]
+# def euler_magnetic(t, x, u, ut, dt, k, dirichletValue=2*pi):
+# 	dx = x[1] - x[0]
 
-	# save the value of the left and right boundaries for later use
-	uRightOld = u[-1]
-	uLeftOld  = u[0]
+# 	# save the value of the left and right boundaries for later use
+# 	uRightOld = u[-1]
+# 	uLeftOld  = u[0]
 
-	# u_tt = u_xx - sin(u)
-	# Get u_tt by using a second order central difference formula to calcuate u_xx
-	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
+# 	# u_tt = u_xx - sin(u)
+# 	# Get u_tt by using a second order central difference formula to calcuate u_xx
+# 	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
 
-	# Use utt in a simple (Euler) integration routine:
-	ut += dt * utt
-	u  += dt * ut
+# 	# Use utt in a simple (Euler) integration routine:
+# 	ut += dt * utt
+# 	u  += dt * ut
 
-	# Impose magnetic boundary condition at the right hand end
-	u[-1] = k*dx + u[-2]
+# 	# Impose magnetic boundary condition at the right hand end
+# 	u[-1] = k*dx + u[-2]
 
-	# Impose Dirichlet boundary condition at left:
-	u[0] = dirichletValue
+# 	# Impose Dirichlet boundary condition at left:
+# 	u[0] = dirichletValue
 
-	# Rolling messes ut up at the boundaries so fix here:
-	ut[-1]  = (u[-1] - uRightOld)/dt
-	ut[0]   = (u[0] - uLeftOld)/dt
+# 	# Rolling messes ut up at the boundaries so fix here:
+# 	ut[-1]  = (u[-1] - uRightOld)/dt
+# 	ut[0]   = (u[0] - uLeftOld)/dt
 
-	t += dt
-	return {'t':t, 'x':x, 'u':u, 'ut':ut}
+# 	t += dt
+# 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
-def euler_integrable(t, x, u, ut, dt, k, dirichletValue=2*pi):
-	dx = x[1] - x[0]
+# def euler_integrable(t, x, u, ut, dt, k, dirichletValue=2*pi):
+# 	dx = x[1] - x[0]
 
-	# save the value of the left and right boundaries for later use
-	uRightOld = u[-1]
-	uLeftOld  = u[0]
+# 	# save the value of the left and right boundaries for later use
+# 	uRightOld = u[-1]
+# 	uLeftOld  = u[0]
 
-	# u_tt = u_xx - sin(u)
-	# Get u_tt by using a second order central difference formula to calcuate u_xx
-	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
+# 	# u_tt = u_xx - sin(u)
+# 	# Get u_tt by using a second order central difference formula to calcuate u_xx
+# 	utt = (np.roll(u,-1) - 2 * u + np.roll(u,1))/dx**2 - sin(u)
 
-	# Use utt in a simple (Euler) integration routine:
-	ut += dt * utt
-	u  += dt * ut
+# 	# Use utt in a simple (Euler) integration routine:
+# 	ut += dt * utt
+# 	u  += dt * ut
 
-	# Impose one parameter integrable boundary condition at the right hand end
-	# ux + 4 k sin(u/2) = 0
-	# u[-1] + 4hk sin(u[-1]/2) = u[-2]
-	# solve boundary condition with newton method
-	u0 = u[-1]
-	error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
-	tol = 10 ** -20
+# 	# Impose one parameter integrable boundary condition at the right hand end
+# 	# ux + 4 k sin(u/2) = 0
+# 	# u[-1] + 4hk sin(u[-1]/2) = u[-2]
+# 	# solve boundary condition with newton method
+# 	u0 = u[-1]
+# 	error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
+# 	tol = 10 ** -20
 
-	i = 0
-	while error > tol:
-		# print u0, error
-		N = 2*dx*k * (u0*cos(u0/2) - 2*sin(u0/2)) + u[-2]
-		D = 1 + 2*dx*k * cos(u0/2)
-		u0 = N/D
+# 	i = 0
+# 	while error > tol:
+# 		# print u0, error
+# 		N = 2*dx*k * (u0*cos(u0/2) - 2*sin(u0/2)) + u[-2]
+# 		D = 1 + 2*dx*k * cos(u0/2)
+# 		u0 = N/D
 
-		error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
-		i += 1
+# 		error = abs(u0 + 4*dx*k * sin(u0/2) - u[-2])
+# 		i += 1
 
-		if i > 500 and error < 10 ** -10:
-			u[-1] = u0
+# 		if i > 500 and error < 10 ** -10:
+# 			u[-1] = u0
 
-	# Impose Dirichlet boundary condition at left:
-	u[0] = dirichletValue
+# 	# Impose Dirichlet boundary condition at left:
+# 	u[0] = dirichletValue
 
-	# Rolling messes ut up at the boundaries so fix here:
-	ut[-1]  = (u[-1]  - uRightOld ) / dt
-	ut[0]   = (u[0]  - uLeftOld ) / dt
+# 	# Rolling messes ut up at the boundaries so fix here:
+# 	ut[-1]  = (u[-1]  - uRightOld ) / dt
+# 	ut[0]   = (u[0]  - uLeftOld ) / dt
 
 
-	t += dt
-	return {'t':t, 'x':x, 'u':u, 'ut':ut}
+# 	t += dt
+# 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
 
 
@@ -161,60 +175,77 @@ class SineGordon(PDE):
 			and returns the state of the field at time t+dt or a string which is the key in named_timeStepFunc
 		"""
 		self.requiredStateKeys = ['t', 'x', 'u', 'ut'] # everything needed to evolve sine-Gordon one step in time
-		self.named_timeStepFuncs = {'eulerRobin': euler_robin,
-								   'eulerMagnetic': euler_magnetic,
-								   'eulerIntegrable': euler_integrable}
+		self.named_timeStepFuncs = {'eulerRobin': euler_robin}
+		# self.named_timeStepFuncs = {'eulerRobin': euler_robin,
+		# 						   'eulerMagnetic': euler_magnetic,
+		# 						   'eulerIntegrable': euler_integrable}
 		self.named_solutions = {'kink' : kink}
 
 		super(SineGordon, self).__init__(timeStepFunc, **state)
 
+	def setticks(self):
+		# mark yticks in multiples of pi
+		from matplotlib import pyplot as plt
+		ax = plt.gca()
+		yticks = np.arange(math.floor(ax.get_ylim()[0]/pi)*pi, math.ceil(ax.get_ylim()[1]/pi)*pi, pi)
+
+		def nameticks(tick):
+			multiple = int(round(tick/pi))
+			if multiple == -1:
+				return '$-\pi$'
+			elif multiple == 0:
+				return '0'
+			elif multiple == 1:
+				return '$\pi$'
+			return '$'+str(multiple)+r'\pi$'
+
+		plt.yticks(yticks, list(map(nameticks, yticks)))
+
+
 	@property
 	def ux(self):
-		# XXX: use a higher order approx to ux
-		# XXX: should cache ux and reuse if t is the same
+		# get the x derivative of u with a 2nd order central difference formula
+		# with 1st order differences at the boundaries
+		x = self.state['x'].data
+		dx = x[1]-x[0]
 
-		# get the x derivative of u with a 1st order forward difference formula
-		x, u = [self.state[key] for key in ('x','u')]
-		ux = np.diff(u)/np.diff(x)
+		u = self.state['u']
+		xAxis = list(self.state.indexes).index('x')
+		ux = np.gradient(u, dx, edge_order=1, axis=xAxis)
 
-		# add the derivative of the point ux[-1] with a backwards difference formula
-		ux = np.append(ux, (u[-1] - u[-2])/(x[1]-x[0]))
-		return ux
+		# put ux in an xarray
+		return xr.DataArray(ux, u.coords, u.dims)
 
-	def xLax(self, mu):
+	def xLax(self, mu, selection={}):
+		from xarray.ufuncs import exp
 		# Return the V in the linear eigenvalue problem Y'(x) = V(x,mu).Y(x)
 		# as a (1,2,2) matrix where the x is along the first axis
-		u, ut = [self.state[key] for key in ('u','ut')]
-		ux = self.ux
+		u, ut, ux = self.state['u'][selection], self.state['ut'][selection], self.ux[selection]
+
+		# make mu a DataArray
+		mu = xr.DataArray(mu, [('mu', mu)])
 
 		# Note that lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		def Vfunc(mu):
-			w = ut + ux
+		w = ut + ux
 
-			# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-			# v11 = - 0.25j*w
-			# v12 = (mu + exp(-1j*u)/(16*mu)) * 1j
-			# v21 = - (mu + exp(1j*u)/(16*mu)) * 1j
-			# v22 = - v11
+		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
+		# v11 = - 0.25j*w
+		# v12 = (mu + exp(-1j*u)/(16*mu)) * 1j
+		# v21 = - (mu + exp(1j*u)/(16*mu)) * 1j
+		# v22 = - v11
 
-			# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
-			# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-			v11 = - 0.25j*w
-			v12 = mu - exp(-1j*u)/(16*mu)
-			v21 = exp(1j*u)/(16*mu) - mu
-			v22 = - v11
+		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
+		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
+		v11 = - 0.25j*w
+		v12 = mu - exp(-1j*u)/(16*mu)
+		v21 = exp(1j*u)/(16*mu) - mu
+		v22 = - v11
 
-			V = np.array([[v11, v12], [v21, v22]])
+		# extend v11 and v22 in the mu dimension
+		v11 = v11 * mu/mu
+		v22 = v22 * mu/mu
 
-			# Need the axis corresponding to the x coordinate to be the 0th axis
-			V = np.rollaxis(V, 2, 0)
-			V = np.ascontiguousarray(V)
-			return V
-
-		if hasattr(mu, '__iter__'):
-			V = np.array([Vfunc(m) for m in mu])
-		else:
-			V = Vfunc(mu)
+		V = xr.concat([xr.concat([v11, v12], dim='Vj'), xr.concat([v21, v22], dim='Vj')], dim='Vi')
 
 		return V
 
@@ -222,34 +253,27 @@ class SineGordon(PDE):
 		# return the asymptotic value of the bound state eigenfunction as x -> -inf
 
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		# if hasattr(mu, '__iter__'):
-		# 	return np.outer(exp(x * (mu + 1/(16*mu))), np.array([1, -1j]))
-		# else:
-		# 	return exp(x * (mu + 1/(16*mu))) * np.array([1, -1j])
+		# exp(x * (mu + 1/(16*mu))) * np.array([1, -1j])
 
 		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		if hasattr(mu, '__iter__'):
-			return np.outer(exp(-1j*(mu-1/(16*mu))*x), np.array([1, -1j]))
-		else:
-			return exp(-1j*(mu-1/(16*mu))*x) * np.array([1, -1j])
-
+		from xarray.ufuncs import exp
+		mu = xr.DataArray(mu, [('mu', mu)])
+		E = exp(-1j*(mu-1/(16*mu))*x)
+		return xr.concat([E, -1j*E], dim='Phii')
 
 	def right_asyptotic_eigenfunction(self, mu, x):
 		# return the asymptotic value of the bound state eigenfunction as x -> +inf
 		
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		# if hasattr(mu, '__iter__'):
-		# 	return np.outer(exp(-x * (mu + 1/(16*mu))), np.array([1, 1j]))
-		# else:
-		# 	return exp(-x * (mu + 1/(16*mu))) * np.array([1, 1j])
+		# exp(-x * (mu + 1/(16*mu))) * np.array([1, 1j])
 
 		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		if hasattr(mu, '__iter__'):
-			return np.outer(exp(1j*(mu-1/(16*mu))*x), np.array([1, 1j]))
-		else:
-			return exp(1j*(mu-1/(16*mu))*x) * np.array([1, 1j])
+		from xarray.ufuncs import exp
+		mu = xr.DataArray(mu, [('mu', mu)])
+		E = exp(1j*(mu-1/(16*mu))*x)
+		return xr.concat([E, 1j*E], dim='Phii')
 
 	def boundStateRegion(self, vRange):
 		from cxroots import PolarRect
@@ -264,63 +288,99 @@ class SineGordon(PDE):
 		phiRange = [0,pi]
 		return PolarRect(center, radiusRange, phiRange)
 
-	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray'):
+	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', selection={}):
 		# find the bound state eigenvalues of the 'x' part of the Lax pair
 		from cxroots import findRoots
 		C = self.boundStateRegion(vRange)
 
-		W = lambda z: self.eigenfunction_wronskian(z,ODEIntMethod)
+		u = self.state['u'][selection]
+
+		# create array to store roots in
+		rootsCoords = dict((key, u.coords[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		rootsDims = list(rootsCoords.keys())
+		rootsShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+
+		roots = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims)
+		multiplicities = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims)
 
 		# roots occour either on the imaginary axis or in pairs with opposite real parts
 		rootSymmetry = lambda z: [-z.conjugate()]
 
-		roots, multiplicities = C.findRoots(W, guessRootSymmetry=rootSymmetry,
-			absTol=1e-4, relTol=1e-4)
-		return np.array(roots)
+		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(u.coords) if key!='x' and len(u[key].shape)>0])
+			wronskian_selection = selection.copy()
+			wronskian_selection.update(indexDict)
+
+			W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
+
+			roots[indexDict], multiplicities[indexDict] = C.findRoots(W, guessRootSymmetry=rootSymmetry,
+				absTol=1e-3, relTol=1e-3)
+
+		return roots
 
 	@property
 	def indexLims(self):
-		# values of the field index at which the field and its derivatives are suitably small
-		x, u, ut = self.state['x'], self.state['u'], self.state['ut']
-		uerr = np.abs(u-2*pi*np.round(u/(2*pi)))
-		uterr = np.abs(ut)
-		uxerr = np.abs(self.ux)
+		# get the values of the x index to the left and right of any soliton content
+		# at which the field and its derivatives are suitably small
+		x, u, ut, ux = self.state['x'], self.state['u'], self.state['ut'], self.ux
 
-		# get the regions to the right and left of anything 'interesting'
-		uerrOk = np.where(uerr<1e-1, np.ones_like(x), np.zeros_like(x))
-		uerrOkIndicies = np.where(uerr<1e-1)[0]
+		# create array to put the index lims into
+		indexLimsNames = [name for name in u[{'x':0}].coords if name!='x']
+		indexLimsNames.append('side')
+		indexLimsCoords = [u[{'x':0}].coords[name].data for name in u[{'x':0}].coords if name!='x']
+		indexLimsCoords.append(['L','R'])
+		indexLimsShape = tuple(map(len, indexLimsCoords))
+		indexLims = np.zeros(indexLimsShape, dtype=int)
+		indexLims = xr.DataArray(indexLims, indexLimsCoords, indexLimsNames)
 
-		if uerrOk[0] == 1:
-			lRegionIndicies = (int(uerrOkIndicies[0]), int(np.where(np.diff(uerrOk)<0)[0][0]))
-		else:
-			lRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][0]+1), int(np.where(np.diff(uerrOk)<0)[0][0]))
+		for index, dummy in np.ndenumerate(u[{'x':0}]):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(u[{'x':0}].indexes) if key!='x'])
 
-		if uerrOk[-1] == 1:
-			rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
-		else:
-			rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+			uerr = np.abs(u[indexDict]-2*pi*np.round(u[indexDict]/(2*pi)))
+			uterr = np.abs(ut[indexDict])
+			uxerr = np.abs(ux[indexDict])
 
-		# within these regions find the minimum of the error function
-		# XXX: make a more considered choice for the error function, perhaps involving x
-		errfunc = uerr+uterr+uxerr
+			# get the regions to the right and left of anything 'interesting'
+			uerrOk = np.where(uerr<1e-1, np.ones_like(x), np.zeros_like(x))
+			uerrOkIndicies = np.where(uerr<1e-1)[0]
 
-		lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]])
-		rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]])
+			if uerrOk[0] == 1:
+				lRegionIndicies = (int(uerrOkIndicies[0]), int(np.where(np.diff(uerrOk)<0)[0][0]))
+			else:
+				lRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][0]+1), int(np.where(np.diff(uerrOk)<0)[0][0]))
 
-		# import matplotlib.pyplot as plt
-		# ax = plt.gca()
-		# plt.plot(x,u)
-		# plt.plot(x,uerrOk)
-		# ax.axvline(x[lRegionIndicies[0]])
-		# ax.axvline(x[lRegionIndicies[1]])
-		# ax.axvline(x[rRegionIndicies[0]])
-		# ax.axvline(x[rRegionIndicies[1]])
-		# plt.plot(x,errfunc)
-		# ax.axvline(x[lBndry], color='k')
-		# ax.axvline(x[rBndry], color='k')
-		# plt.show()
+			if uerrOk[-1] == 1:
+				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
+			else:
+				if np.where(np.diff(uerrOk)>0)[0]:
+					rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+				else:
+					# just take the right most point
+					rRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][-1]), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
 
-		return lBndry, rBndry
+			# within these regions find the minimum of the error function
+			# XXX: make a more considered choice for the error function, perhaps involving x
+			errfunc = uerr+uterr+uxerr
+
+			lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]])
+			rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]])
+
+			# import matplotlib.pyplot as plt
+			# ax = plt.gca()
+			# plt.plot(x,u[{'k':1}])
+			# plt.plot(x,uerrOk)
+			# ax.axvline(x[lRegionIndicies[0]])
+			# ax.axvline(x[lRegionIndicies[1]])
+			# ax.axvline(x[rRegionIndicies[0]])
+			# ax.axvline(x[rRegionIndicies[1]])
+			# plt.plot(x,errfunc)
+			# ax.axvline(x[lBndry], color='k')
+			# ax.axvline(x[rBndry], color='k')
+			# plt.show()
+
+			indexLims[indexDict] = lBndry, rBndry
+
+		return indexLims
 
 	@property
 	def charge(self):
