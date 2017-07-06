@@ -27,6 +27,13 @@ def getval(state, key):
 
 def stateFunc(fieldFunc):
 	def dataset_wrap(*args, **kwargs):
+		# include defaults explicitly in the kwargs
+		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
+		defaults = inspect.getargspec(fieldFunc)[3]
+		tempkwargs = dict((key, defaults[i]) for i, key in enumerate(inspect.getargspec(fieldFunc)[0][-len(defaults):]))
+		tempkwargs.update(kwargs)
+		kwargs = tempkwargs
+
 		# put args in the kwargs
 		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
 		kwargs.update(zip(inspect.getargspec(fieldFunc)[0], args))
