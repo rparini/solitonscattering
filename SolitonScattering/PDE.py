@@ -238,7 +238,7 @@ class PDE(object):
 		# call the animator
 		frames = saveAnimationDict.pop('frames', None)
 		if frames is not None:
-			frames = saveAnimationDict.pop('frames', None)//(skipFrames+1)
+			frames = frames//(skipFrames+1)
 		anim = animation.FuncAnimation(fig, update_animation, init_func=init, interval=20, blit=True, frames=frames)
 
 		if saveAnimationDict:
