@@ -34,14 +34,17 @@ def stateFunc(fieldFunc):
 		# figure out what variables we're vectorizing over (only numpy arrays)
 		vectorize = [key for key in kwargs.keys() if isnparray(kwargs[key])]
 
+		# make vectorized arguments into coordinate arrays
+		coords = dict((key, xr.DataArray(kwargs[key], {key:kwargs[key]})) for key in vectorize)
+		kwargs.update(coords)
+
 		# get u, ut ect. from the given function
 		dataDict = fieldFunc(**kwargs)
 
-		data_vars = dict([(key, (vectorize, dataDict[key])) for key in dataDict.keys()])
-		coords = dict([(key, kwargs[key]) for key in vectorize])
-		attrs = dict([(key, kwargs[key]) for key in kwargs if key not in vectorize])
+		state = xr.Dataset(dataDict)
+		state.attrs = dict([(key, kwargs[key]) for key in kwargs if key not in vectorize])
+		return state
 
-		return xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
 	return dataset_wrap
 
 
