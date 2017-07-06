@@ -35,7 +35,7 @@ def stateFunc(fieldFunc):
 		vectorize = [key for key in kwargs.keys() if isnparray(kwargs[key])]
 
 		# make vectorized arguments into coordinate arrays
-		coords = dict((key, xr.DataArray(kwargs[key], {key:kwargs[key]})) for key in vectorize)
+		coords = dict((key, xr.DataArray(kwargs[key], coords=[kwargs[key]], dims=[key])) for key in vectorize)
 		kwargs.update(coords)
 
 		# get u, ut ect. from the given function
