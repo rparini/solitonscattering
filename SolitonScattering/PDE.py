@@ -238,76 +238,102 @@ class PDE(object):
 		# return the asymptotic value of the bound state eigenfunction as x -> +inf
 		raise NotImplementedError('Implement right_asyptotic_eigenfunction in a child class')		
 
-	def eigenfunction_right(self, mu, ODEIntMethod='CRungeKuttaArray'):
+	def eigenfunction_right(self, muList, ODEIntMethod='CRungeKuttaArray', selection={}):
 		import matplotlib.pyplot as plt
-		x, u = self.state['x'], self.state['u']
+		x, u = self.state['x'], self.state['u'][selection]
+		indexLims = self.indexLims[selection]
 
-		xLIndex = 0
-		xRIndex = len(x)-1
+		# muList should be a list
+		if not hasattr(muList, '__iter__'):
+			muList = [muList]
 
-		x = x[xLIndex:xRIndex+1]
-		h = x[1] - x[0]
-		xL, xR = x[0], x[-1]
-		yBoundL = self.left_asyptotic_eigenfunction(mu, xL)
+		axisShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
 
-		V = self.xLax(mu)[xLIndex:xRIndex+1]
-		if ODEIntMethod == 'CRungeKuttaArray':
-			yR = ODE.CRungeKuttaArray(2*h, yBoundL, V)
-		elif ODEIntMethod == 'RungeKuttaArray':
-			yR = ODE.RungeKuttaArray(2*h, yBoundL, V)[-1]
+		# create yR as an empty DataArray
+		yRCoords = dict((key, u.coords[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		yRCoords['mu'] = muList
+		yRDims = list(yRCoords.keys())
+		yRDims.append('yRi')
+		yRShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		yRShape.append(len(muList))
+		yRShape.append(2)
+
+		yR = np.zeros(yRShape, dtype=np.complex128)
+		yR = xr.DataArray(yR, coords=yRCoords, dims=yRDims)
+
+		VFull = self.xLax(muList, selection=selection)
+
+		for index, dummy in np.ndenumerate(np.empty(axisShape)):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(self.state.coords) if key!='x' and len(u[key].shape)>0])
+			xLIndex, xRIndex = map(int, indexLims[indexDict])
+			x = self.state['x'][xLIndex:xRIndex+1]
+			h = float(x[1] - x[0])
+			xL, xR = x[0], x[-1]
+
+			# get yBoundL and reorder
+			yBoundL = self.left_asyptotic_eigenfunction(muList, xL)
+			yBoundL = yBoundL.transpose('mu', 'Phii')
+
+			for muindex, mu in enumerate(muList):
+				# reorder V and cast as a numpy array 
+				V = np.zeros((len(x),2,2), dtype=np.complex128)
+				V[:] = VFull[indexDict][{'x':slice(xLIndex, xRIndex+1)}][{'mu':muindex}].transpose('x','Vi','Vj').values
+
+				yBoundL_mu = np.zeros(2, dtype=np.complex128)
+				yBoundL_mu[:] = yBoundL[{'mu':muindex}].values
+
+				# solve for the Jost eigenfunction which at xL matches the left asymptotic eigenfunction
+				# note that stepsize for Runge Kutta 4th order is 2h since it requires midpoint values
+				if ODEIntMethod == 'CRungeKuttaArray':
+					yR[indexDict][{'mu':muindex}] = ODE.CRungeKuttaArray(2*h, yBoundL_mu, V)
+				elif ODEIntMethod == 'RungeKuttaArray':
+					yR[indexDict][{'mu':muindex}] = ODE.RungeKuttaArray(2*h, yBoundL_mu, V)[-1]
 
 		return yR
 
-	def eigenfunction_wronskian(self, mu, ODEIntMethod='CRungeKuttaArray'):
+	def eigenfunction_wronskian(self, mu, ODEIntMethod='CRungeKuttaArray', selection={}):
 		# solve for the eigenfunction across x as an intial value problem
 		# at x[0] the eigenfunction is yBoundL = self.left_asyptotic_eigenfunction(mu)
 		# solve for the value of the eigenfunction at x[-1], yR
+		yR = self.eigenfunction_right(mu, ODEIntMethod, selection)
 
-		x = self.state['x']
-
-		# XXX: need to fix xRIndex based on 'smoothness' of the field at xR
-		xLIndex = 0
-		xRIndex = len(x)-1
-
-		xL, xR = x[xLIndex], x[xRIndex]
-
-		fullx = self.state['x']
-		h = fullx[1] - fullx[0]
-
-		# XXX: At the moment the fastest way to take a vector of mu is to just loop over mu.
-		# if mu is not given as an array make it an array of length 1
+		# mu is assumed to be a list
 		if not hasattr(mu, '__iter__'):
-			mu = np.array([mu])
+			mu = [mu]
 
-		# get initial condition y(xL)
-		yBoundL = self.left_asyptotic_eigenfunction(mu, xL)
+		u = self.state['u'][selection]
 
-		# get xLax in the interval [xL, xR] with spacing h
-		# V.shape = (#values of mu, #points x, size of lax pair, size of lax pair)
-		V = self.xLax(mu)[xLIndex:xRIndex+1]
+		# create wronskian, W, as an empty DataArray
+		WCoords = dict((key, u.coords[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		WCoords['mu'] = mu
+		WDims = list(WCoords.keys())
+		WShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		WShape.append(len(mu))
 
-		# solve for the Jost eigenfunction which at xL matches the left asymptotic eigenfunction
-		# note that stepsize for Runge Kutta 4th order is 2h since it requires midpoint values
-		if ODEIntMethod == 'CRungeKuttaArray':
-			yR = np.array([ODE.CRungeKuttaArray(2*h, yBoundL[i], V[i]) for i in range(len(mu))])
-		elif ODEIntMethod == 'RungeKuttaArray':
-			yR = np.array([ODE.RungeKuttaArray(2*h, yBoundL[i], V[i])[-1] for i in range(len(mu))])
+		W = np.zeros(WShape, dtype=np.complex128)
+		W = xr.DataArray(W, WCoords, WDims)
 
-		# M is the number of steps acually taken by Runge Kutta
-		M = (V.shape[1]-1)//2
+		# iterate over all axis except mu
+		axisShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		for index, dummy in np.ndenumerate(np.empty(axisShape)):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(self.state.coords) if key!='x' and len(u[key].shape)>0])
+			
+			xLIndex, xRIndex = map(int, self.indexLims[selection][indexDict])
+			x = self.state['x'][xLIndex: xRIndex+1]
+			h = float(x[1] - x[0])
+			xL, xR = x[0], x[-1]
 
-		# so that the real xR is
-		xR = xL + 2*h*M
+			# M is the number of steps acually taken by Runge Kutta
+			M = (len(x)-1)//2
 
-		# calculate the wronskian of the eigenfunction we solve for and
-		# the bound sate eigenfunction
-		yBoundR = self.right_asyptotic_eigenfunction(mu, xR)
-		W = yR[:,0]*yBoundR[:,1] - yR[:,1]*yBoundR[:,0]
+			# so that the real xR is
+			xR = xL + 2*h*M
 
-		if len(W) == 1:
-			return W[0]
-		else:
-			return W
+			# calculate the wronskian of the eigenfunction we solve for and the bound sate eigenfunction
+			yBoundR = self.right_asyptotic_eigenfunction(mu, xR)
+			W[indexDict] = yR[indexDict][{'yRi':0}]*yBoundR[{'Phii':1}] - yR[indexDict][{'yRi':1}]*yBoundR[{'Phii':0}]
+
+		return W
 
 	def show_eigenfunction(self, mu):
 		import matplotlib.pyplot as plt

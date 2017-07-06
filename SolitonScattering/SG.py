@@ -215,40 +215,36 @@ class SineGordon(PDE):
 		# put ux in an xarray
 		return xr.DataArray(ux, u.coords, u.dims)
 
-	def xLax(self, mu):
+	def xLax(self, mu, selection={}):
+		from xarray.ufuncs import exp
 		# Return the V in the linear eigenvalue problem Y'(x) = V(x,mu).Y(x)
 		# as a (1,2,2) matrix where the x is along the first axis
-		u, ut = [self.state[key] for key in ('u','ut')]
-		ux = self.ux
+		u, ut, ux = self.state['u'][selection], self.state['ut'][selection], self.ux[selection]
+
+		# make mu a DataArray
+		mu = xr.DataArray(mu, [('mu', mu)])
 
 		# Note that lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		def Vfunc(mu):
-			w = ut + ux
+		w = ut + ux
 
-			# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-			# v11 = - 0.25j*w
-			# v12 = (mu + exp(-1j*u)/(16*mu)) * 1j
-			# v21 = - (mu + exp(1j*u)/(16*mu)) * 1j
-			# v22 = - v11
+		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
+		# v11 = - 0.25j*w
+		# v12 = (mu + exp(-1j*u)/(16*mu)) * 1j
+		# v21 = - (mu + exp(1j*u)/(16*mu)) * 1j
+		# v22 = - v11
 
-			# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
-			# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-			v11 = - 0.25j*w
-			v12 = mu - exp(-1j*u)/(16*mu)
-			v21 = exp(1j*u)/(16*mu) - mu
-			v22 = - v11
+		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
+		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
+		v11 = - 0.25j*w
+		v12 = mu - exp(-1j*u)/(16*mu)
+		v21 = exp(1j*u)/(16*mu) - mu
+		v22 = - v11
 
-			V = np.array([[v11, v12], [v21, v22]])
+		# extend v11 and v22 in the mu dimension
+		v11 = v11 * mu/mu
+		v22 = v22 * mu/mu
 
-			# Need the axis corresponding to the x coordinate to be the 0th axis
-			V = np.rollaxis(V, 2, 0)
-			V = np.ascontiguousarray(V)
-			return V
-
-		if hasattr(mu, '__iter__'):
-			V = np.array([Vfunc(m) for m in mu])
-		else:
-			V = Vfunc(mu)
+		V = xr.concat([xr.concat([v11, v12], dim='Vj'), xr.concat([v21, v22], dim='Vj')], dim='Vi')
 
 		return V
 
@@ -256,34 +252,27 @@ class SineGordon(PDE):
 		# return the asymptotic value of the bound state eigenfunction as x -> -inf
 
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		# if hasattr(mu, '__iter__'):
-		# 	return np.outer(exp(x * (mu + 1/(16*mu))), np.array([1, -1j]))
-		# else:
-		# 	return exp(x * (mu + 1/(16*mu))) * np.array([1, -1j])
+		# exp(x * (mu + 1/(16*mu))) * np.array([1, -1j])
 
 		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		if hasattr(mu, '__iter__'):
-			return np.outer(exp(-1j*(mu-1/(16*mu))*x), np.array([1, -1j]))
-		else:
-			return exp(-1j*(mu-1/(16*mu))*x) * np.array([1, -1j])
-
+		from xarray.ufuncs import exp
+		mu = xr.DataArray(mu, [('mu', mu)])
+		E = exp(-1j*(mu-1/(16*mu))*x)
+		return xr.concat([E, -1j*E], dim='Phii')
 
 	def right_asyptotic_eigenfunction(self, mu, x):
 		# return the asymptotic value of the bound state eigenfunction as x -> +inf
 		
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		# if hasattr(mu, '__iter__'):
-		# 	return np.outer(exp(-x * (mu + 1/(16*mu))), np.array([1, 1j]))
-		# else:
-		# 	return exp(-x * (mu + 1/(16*mu))) * np.array([1, 1j])
+		# exp(-x * (mu + 1/(16*mu))) * np.array([1, 1j])
 
 		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		if hasattr(mu, '__iter__'):
-			return np.outer(exp(1j*(mu-1/(16*mu))*x), np.array([1, 1j]))
-		else:
-			return exp(1j*(mu-1/(16*mu))*x) * np.array([1, 1j])
+		from xarray.ufuncs import exp
+		mu = xr.DataArray(mu, [('mu', mu)])
+		E = exp(1j*(mu-1/(16*mu))*x)
+		return xr.concat([E, 1j*E], dim='Phii')
 
 	def boundStateRegion(self, vRange):
 		from cxroots import PolarRect
@@ -298,19 +287,35 @@ class SineGordon(PDE):
 		phiRange = [0,pi]
 		return PolarRect(center, radiusRange, phiRange)
 
-	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray'):
+	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', selection={}):
 		# find the bound state eigenvalues of the 'x' part of the Lax pair
 		from cxroots import findRoots
 		C = self.boundStateRegion(vRange)
 
-		W = lambda z: self.eigenfunction_wronskian(z,ODEIntMethod)
+		u = self.state['u'][selection]
+
+		# create array to store roots in
+		rootsCoords = dict((key, u.coords[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+		rootsDims = list(rootsCoords.keys())
+		rootsShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
+
+		roots = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims)
+		multiplicities = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims)
 
 		# roots occour either on the imaginary axis or in pairs with opposite real parts
 		rootSymmetry = lambda z: [-z.conjugate()]
 
-		roots, multiplicities = C.findRoots(W, guessRootSymmetry=rootSymmetry,
-			absTol=1e-4, relTol=1e-4)
-		return np.array(roots)
+		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(u.coords) if key!='x' and len(u[key].shape)>0])
+			wronskian_selection = selection.copy()
+			wronskian_selection.update(indexDict)
+
+			W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
+
+			roots[indexDict], multiplicities[indexDict] = C.findRoots(W, guessRootSymmetry=rootSymmetry,
+				absTol=1e-4, relTol=1e-4)
+
+		return roots
 
 	@property
 	def indexLims(self):
