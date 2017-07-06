@@ -324,16 +324,17 @@ class SineGordon(PDE):
 		# at which the field and its derivatives are suitably small
 		x, u, ut, ux = self.state['x'], self.state['u'], self.state['ut'], self.ux
 
-		axisNames = list(self.state.indexes)
-		axisShape = self.state['u'].shape
-
 		# create array to put the index lims into
-		indexLimsShape = [shape for i, shape in enumerate(axisShape) if axisNames[i] != 'x']
-		indexLimsShape.append(2)
+		indexLimsNames = [name for name in u[{'x':0}].coords if name!='x']
+		indexLimsNames.append('side')
+		indexLimsCoords = [u[{'x':0}].coords[name].data for name in u[{'x':0}].coords if name!='x']
+		indexLimsCoords.append(['L','R'])
+		indexLimsShape = tuple(map(len, indexLimsCoords))
 		indexLims = np.zeros(indexLimsShape, dtype=int)
+		indexLims = xr.DataArray(indexLims, indexLimsCoords, indexLimsNames)
 
-		for index, dummy in np.ndenumerate(self.state['u'][{'x':0}]):
-			indexDict = dict([(key, index[i]) for i, key in enumerate(axisNames) if key!='x'])
+		for index, dummy in np.ndenumerate(u[{'x':0}]):
+			indexDict = dict([(key, index[i]) for i, key in enumerate(u[{'x':0}].indexes) if key!='x'])
 
 			uerr = np.abs(u[indexDict]-2*pi*np.round(u[indexDict]/(2*pi)))
 			uterr = np.abs(ut[indexDict])
@@ -377,14 +378,7 @@ class SineGordon(PDE):
 			# ax.axvline(x[rBndry], color='k')
 			# plt.show()
 
-			indexLims[index] = lBndry, rBndry
-
-		# put indexLims into an xarray
-		indexLimsCoords = [self.state.coords[name].data for name in self.state.coords if name!='x']
-		indexLimsCoords.append(['L','R'])
-		indexLimsNames = [name for name in self.state.coords if name!='x']
-		indexLimsNames.append('side')
-		indexLims = xr.DataArray(indexLims, indexLimsCoords, indexLimsNames)
+			indexLims[indexDict] = lBndry, rBndry
 
 		return indexLims
 
