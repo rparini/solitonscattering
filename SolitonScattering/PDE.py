@@ -64,8 +64,6 @@ def timeStepFunc(stepFunc):
 					# anything we are not vectorizing over should be an attribute
 					state.attrs[key] = timestepKwargs[key]
 
-		# XXX: save defaults as attributes
-
 		# pass state to the timeStepFunc
 		funcArgs = dict((key, getval(state, key)) for key in inspect.getargspec(stepFunc)[0] if getval(state, key) is not None)
 
