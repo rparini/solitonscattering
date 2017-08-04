@@ -290,7 +290,6 @@ class SineGordon(PDE):
 
 	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', selection={}):
 		# find the bound state eigenvalues of the 'x' part of the Lax pair
-		from cxroots import findRoots
 		C = self.boundStateRegion(vRange)
 
 		u = self.state['u'][selection]
@@ -313,7 +312,7 @@ class SineGordon(PDE):
 
 			W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
 
-			roots[indexDict], multiplicities[indexDict] = C.findRoots(W, guessRootSymmetry=rootSymmetry,
+			roots[indexDict], multiplicities[indexDict] = C.roots(W, guessRootSymmetry=rootSymmetry,
 				absTol=1e-3, relTol=1e-3)
 
 		return roots
