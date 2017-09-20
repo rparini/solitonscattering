@@ -210,7 +210,7 @@ class PDE(object):
 		from matplotlib import animation
 
 		fig = plt.figure()
-		ax = plt.axes(xlim=(self.state['x'][0], self.state['x'][-1]), ylim=(-2, 10))
+		ax = plt.axes(xlim=(self.state['x'].values[0], self.state['x'].values[-1]), ylim=(-2, 10))
 		line, = ax.plot([], [])
 		if ylim is not None:
 			plt.yrange = ylim
@@ -232,7 +232,7 @@ class PDE(object):
 				self.state = self.time_step(self.state, **timeStepArgs)
 
 			line.set_data(self.state['x'], self.state['u'])
-			timeLabel.set_text('Time = %.1f' % self.state['t'])
+			timeLabel.set_text('$t$ = %.1f' % self.state.attrs['t'])
 			return line, timeLabel
 
 		# call the animator
