@@ -157,6 +157,7 @@ class PDE(object):
 		from matplotlib import pyplot as plt
 		if useTex:
 			plt.rc('text', usetex=True)
+			plt.rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
 			plt.rcParams.update({'font.size': 16})
 
 		x, u = [self.state[k] for k in ['x','u']]
