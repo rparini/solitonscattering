@@ -195,6 +195,7 @@ class PDE(object):
 		self.plot(**kwargs)
 		if saveFile:
 			plt.savefig(saveFile, bbox_inches='tight')
+			plt.close()
 		else:
 			plt.show()
 
