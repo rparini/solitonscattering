@@ -12,7 +12,6 @@ from .PDE import PDE, stateFunc, timeStepFunc
 solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
 solitonFrequency = lambda l: np.real(l)/np.abs(l)
 
-
 #### Exact solutions to the sine-Gordon Eq. ####
 gamma = lambda v: 1 / sqrt(1 - v ** 2)
 
@@ -225,7 +224,6 @@ class SineGordon(PDE):
 		# make mu a DataArray
 		mu = xr.DataArray(mu, [('mu', mu)])
 
-		# Note that lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
 		w = ut + ux
 
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
@@ -251,41 +249,46 @@ class SineGordon(PDE):
 
 	def left_asyptotic_eigenfunction(self, mu, x):
 		# return the asymptotic value of the bound state eigenfunction as x -> -inf
+		from xarray.ufuncs import exp
+		mu = xr.DataArray(mu, [('mu', mu)])
 
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		# exp(x * (mu + 1/(16*mu))) * np.array([1, -1j])
+		# E = exp((mu+1/(16*mu))*x)
 
 		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		from xarray.ufuncs import exp
-		mu = xr.DataArray(mu, [('mu', mu)])
 		E = exp(-1j*(mu-1/(16*mu))*x)
+
 		return xr.concat([E, -1j*E], dim='Phii')
 
 	def right_asyptotic_eigenfunction(self, mu, x):
 		# return the asymptotic value of the bound state eigenfunction as x -> +inf
-		
+		from xarray.ufuncs import exp
+		mu = xr.DataArray(mu, [('mu', mu)])
+
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
-		# exp(-x * (mu + 1/(16*mu))) * np.array([1, 1j])
+		# E = exp(-(mu+1/(16*mu))*x)
 
 		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		from xarray.ufuncs import exp
-		mu = xr.DataArray(mu, [('mu', mu)])
 		E = exp(1j*(mu-1/(16*mu))*x)
+
 		return xr.concat([E, 1j*E], dim='Phii')
 
 	def boundStateRegion(self, vRange):
 		from cxroots import PolarRect
 		# get the region in which to look for bound state eigenvalues
 		radiusBuffer = 0.05
+
+		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
+		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
 		mu = lambda v: 0.25j*sqrt((1-v)/(1+v))
+		phiRange = [0,pi]
+
 		radiusRange = np.sort(np.abs(mu(np.array(vRange))))
 		radiusRange = [radiusRange[0]-radiusBuffer,
 					   radiusRange[1]+radiusBuffer]
-
 		center = 0
-		phiRange = [0,pi]
 		return PolarRect(center, radiusRange, phiRange)
 
 	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', selection={}):
