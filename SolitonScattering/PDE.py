@@ -12,7 +12,6 @@ from . import ODE
 
 try:
 	import matplotlib
-	matplotlib.use('TkAgg')
 except ImportError:
 	warn('Unable to import matplotlib')
 
