@@ -243,6 +243,7 @@ class PDE(object):
 		if saveAnimationDict:
 			# save the animation as a file
 			anim.save(**saveAnimationDict)
+			plt.close()
 		else:
 			plt.show()
 
