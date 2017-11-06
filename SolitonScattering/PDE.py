@@ -19,6 +19,7 @@ isnparray = lambda x: isinstance(x, np.ndarray)
 
 def getval(state, key):
 	# get a value whether it is a coordinate, data or attribute
+	# XXX: it would be nice of xarray did this automatically
 	if key in state:
 		return state[key]
 	elif key in state.attrs:
