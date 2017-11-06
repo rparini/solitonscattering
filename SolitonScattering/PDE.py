@@ -145,10 +145,19 @@ class PDE(object):
 		# reset the state of the field to the state it was in when the instance was first initilized
 		self.state = self._initialState
 
-	def time_evolve(self, tFin, **timeStepArgs):		
+	def time_evolve(self, tFin, progressBar=True, **timeStepArgs):
 		# pass the time step function the current state and any additional given arguments
-		while getval(self.state, 't') < tFin:
-			self.state = self.time_step(self.state, **timeStepArgs)				
+		if progressBar and 'dt' in timeStepArgs:
+			from tqdm import trange
+			dt = timeStepArgs['dt']
+			t = getval(self.state, 't')
+			N = math.ceil((tFin-t)/dt)
+			for n in trange(N, desc='Time Evolution'):
+				self.state = self.time_step(self.state, **timeStepArgs)	
+
+		else:
+			while getval(self.state, 't') < tFin:
+				self.state = self.time_step(self.state, **timeStepArgs)	
 
 	def setticks(self):
 		pass
