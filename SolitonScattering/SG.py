@@ -292,7 +292,7 @@ class SineGordon(PDE):
 		center = 0
 		return AnnulusSector(center, radiusRange, phiRange)
 
-	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, verbose=False):
+	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, verbose=1):
 		# find the bound state eigenvalues of the 'x' part of the Lax pair
 		C = self.boundStateRegion(vRange)
 		u = self.state['u'][selection]
@@ -303,6 +303,11 @@ class SineGordon(PDE):
 		rootFindingKwargs.setdefault('relTol', 1e-2)
 		rootFindingKwargs.setdefault('M', 3)
 		rootFindingKwargs.setdefault('intMethod', 'romb')
+
+		if verbose == 2:
+			rootFindingKwargs['verbose'] = True
+		else:
+			rootFindingKwargs['verbose'] = False
 
 		# add any remaining defaults to rootFindingKwargs
 		import cxroots
@@ -323,9 +328,19 @@ class SineGordon(PDE):
 
 		roots = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims, attrs=rootsAttrs)
 
+		# create progressbar
+		if verbose:
+			from tqdm import trange
+			progressBar = trange(sum(rootsShape))
+
 		# compute the roots
 		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
-			indexDict = dict([(key, index[i]) for i, key in enumerate(u.coords) if key!='x' and len(u[key].shape)>0])
+			indexDict = dict([(key, index[i]) for i, key in enumerate(rootsCoords)])
+
+			if verbose:
+				coordDict = dict([(key, float(rootsCoords[key][index[i]])) for i, key in enumerate(rootsCoords)])
+				progressBar.set_description(desc='Computing eigenvalues for '+str(coordDict))
+
 			wronskian_selection = selection.copy()
 			wronskian_selection.update(indexDict)
 
@@ -334,6 +349,9 @@ class SineGordon(PDE):
 			rootResult = C.roots(W, **rootFindingKwargs)
 			r, m = rootResult.roots, rootResult.multiplicities
 			roots[indexDict] = np.array(r)
+
+			if verbose:
+				progressBar.update()
 
 		return roots
 
