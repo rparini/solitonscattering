@@ -5,6 +5,7 @@ from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log
 from warnings import warn
 import xarray as xr
 import math
+import inspect
 
 from .PDE import PDE, stateFunc, timeStepFunc
 
@@ -276,7 +277,7 @@ class SineGordon(PDE):
 		return xr.concat([E, 1j*E], dim='Phii')
 
 	def boundStateRegion(self, vRange):
-		from cxroots import PolarRect
+		from cxroots import AnnulusSector
 		# get the region in which to look for bound state eigenvalues
 		radiusBuffer = 0.05
 
@@ -289,25 +290,40 @@ class SineGordon(PDE):
 		radiusRange = [radiusRange[0]-radiusBuffer,
 					   radiusRange[1]+radiusBuffer]
 		center = 0
-		return PolarRect(center, radiusRange, phiRange)
+		return AnnulusSector(center, radiusRange, phiRange)
 
-	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', selection={}):
+	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, verbose=False):
 		# find the bound state eigenvalues of the 'x' part of the Lax pair
 		C = self.boundStateRegion(vRange)
-
 		u = self.state['u'][selection]
+
+		# set custom defaults
+		rootFindingKwargs.setdefault('guessRootSymmetry', lambda z: [-z.conjugate()])	# roots occour either on the imaginary axis or in pairs with opposite real parts
+		rootFindingKwargs.setdefault('absTol', 1e-2)
+		rootFindingKwargs.setdefault('relTol', 1e-2)
+		rootFindingKwargs.setdefault('M', 3)
+		rootFindingKwargs.setdefault('intMethod', 'romb')
+
+		# add any remaining defaults to rootFindingKwargs
+		import cxroots
+		rootArgs, rootVarargs, rootKeywords, rootDefaults = inspect.getargspec(cxroots.RootFinder.findRootsGen)
+		rootDefaultDicts = dict(zip(rootArgs[-len(rootDefaults):], rootDefaults))
+		for key, val in rootDefaultDicts.items():
+			rootFindingKwargs.setdefault(key, val)
 
 		# create array to store roots in
 		rootsCoords = dict((key, u.coords[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
 		rootsDims = list(rootsCoords.keys())
 		rootsShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
 
-		roots = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims)
-		multiplicities = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims)
+		rootsAttrs = {'vRange':vRange,
+					  'ODEIntMethod':ODEIntMethod}
+		rootsAttrs.update(rootFindingKwargs)
+		del rootsAttrs['verbose']	# no need to record verbose
 
-		# roots occour either on the imaginary axis or in pairs with opposite real parts
-		rootSymmetry = lambda z: [-z.conjugate()]
+		roots = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims, attrs=rootsAttrs)
 
+		# compute the roots
 		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
 			indexDict = dict([(key, index[i]) for i, key in enumerate(u.coords) if key!='x' and len(u[key].shape)>0])
 			wronskian_selection = selection.copy()
@@ -315,8 +331,9 @@ class SineGordon(PDE):
 
 			W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
 
-			roots[indexDict], multiplicities[indexDict] = C.roots(W, guessRootSymmetry=rootSymmetry,
-				absTol=1e-3, relTol=1e-3)
+			rootResult = C.roots(W, **rootFindingKwargs)
+			r, m = rootResult.roots, rootResult.multiplicities
+			roots[indexDict] = np.array(r)
 
 		return roots
 
