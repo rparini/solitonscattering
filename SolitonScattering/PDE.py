@@ -315,6 +315,8 @@ class PDE(object):
 					yR[indexDict][{'mu':muindex}] = ODE.CRungeKuttaArray(2*h, yBoundL_mu, V)
 				elif ODEIntMethod == 'RungeKuttaArray':
 					yR[indexDict][{'mu':muindex}] = ODE.RungeKuttaArray(2*h, yBoundL_mu, V)[-1]
+				else:
+					raise ValueError("ODEIntMethod must be either 'CRungeKuttaArray' or 'RungeKuttaArray'")
 
 		return yR
 
