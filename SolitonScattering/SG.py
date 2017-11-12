@@ -7,6 +7,7 @@ import xarray as xr
 import math
 import inspect
 
+import cxroots
 from .PDE import PDE, stateFunc, timeStepFunc
 
 #### Some useful equations
@@ -310,7 +311,6 @@ class SineGordon(PDE):
 			rootFindingKwargs['verbose'] = False
 
 		# add any remaining defaults to rootFindingKwargs
-		import cxroots
 		rootArgs, rootVarargs, rootKeywords, rootDefaults = inspect.getargspec(cxroots.RootFinder.findRootsGen)
 		rootDefaultDicts = dict(zip(rootArgs[-len(rootDefaults):], rootDefaults))
 		for key, val in rootDefaultDicts.items():
