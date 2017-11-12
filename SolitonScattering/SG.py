@@ -223,7 +223,7 @@ class SineGordon(PDE):
 		u, ut, ux = self.state['u'][selection], self.state['ut'][selection], self.ux[selection]
 
 		# make mu a DataArray
-		mu = xr.DataArray(mu, [('mu', mu)])
+		mu = xr.DataArray(np.array(mu), {'mu':np.array(mu)})
 
 		w = ut + ux
 
