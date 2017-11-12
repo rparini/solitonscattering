@@ -211,7 +211,7 @@ class SineGordon(PDE):
 		dx = x[1]-x[0]
 
 		u = self.state['u']
-		xAxis = list(self.state.indexes).index('x')
+		xAxis = list(u.indexes).index('x')
 		ux = np.gradient(u, dx, edge_order=1, axis=xAxis)
 
 		# put ux in an xarray
