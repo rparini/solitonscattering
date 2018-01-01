@@ -44,6 +44,5 @@ setup(
     author = 'Robert Parini',
     ext_modules = ext_modules,
     packages = packages,
-    install_requires = ['numpy', 'scipy', 'cxroots'],
-    platforms = ['all'],
+    platforms = ['all']
 )
