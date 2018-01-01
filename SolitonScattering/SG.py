@@ -377,9 +377,12 @@ class SineGordon(PDE):
 			uterr = np.abs(ut[indexDict])
 			uxerr = np.abs(ux[indexDict])
 
+			# XXX: make a more considered choice for the error function
+			errfunc = uerr+uterr+uxerr
+
 			# get the regions to the right and left of anything 'interesting'
-			uerrOk = np.where(uerr<1e-1, np.ones_like(x), np.zeros_like(x))
-			uerrOkIndicies = np.where(uerr<1e-1)[0]
+			uerrOk = np.where(errfunc<1e-1, np.ones_like(x), np.zeros_like(x))
+			uerrOkIndicies = np.where(errfunc<1e-1)[0]
 
 			if uerrOk[0] == 1:
 				lRegionIndicies = (int(uerrOkIndicies[0]), int(np.where(np.diff(uerrOk)<0)[0][0]))
@@ -388,28 +391,25 @@ class SineGordon(PDE):
 
 			if uerrOk[-1] == 1:
 				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
+			elif np.any(np.diff(uerrOk)>0):
+				# if there is any right hand region
+				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
 			else:
-				if np.where(np.diff(uerrOk)>0)[0]:
-					rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
-				else:
-					# just take the right most point
-					rRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][-1]), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
+				raise RuntimeError('No right hand region found.  Consider allowing time evolution to run for longer.')
 
-			# within these regions find the minimum of the error function
-			# XXX: make a more considered choice for the error function, perhaps involving x
-			errfunc = uerr+uterr+uxerr
-
-			lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]])
-			rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]])
+			# within these regions find the minimum of the error function, biased
+			# slightly towards reducing the distance between xL and xR
+			lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]] - 1e-3*x[lRegionIndicies[0]:lRegionIndicies[1]])
+			rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]] + 1e-3*x[rRegionIndicies[0]:rRegionIndicies[1]])
 
 			# import matplotlib.pyplot as plt
 			# ax = plt.gca()
-			# plt.plot(x,u[{'k':1}])
+			# plt.plot(x,u[indexDict])
 			# plt.plot(x,uerrOk)
-			# ax.axvline(x[lRegionIndicies[0]])
-			# ax.axvline(x[lRegionIndicies[1]])
-			# ax.axvline(x[rRegionIndicies[0]])
-			# ax.axvline(x[rRegionIndicies[1]])
+			# ax.axvline(x[lRegionIndicies[0]], color='r')
+			# ax.axvline(x[lRegionIndicies[1]], color='r')
+			# ax.axvline(x[rRegionIndicies[0]], color='r')
+			# ax.axvline(x[rRegionIndicies[1]], color='r')
 			# plt.plot(x,errfunc)
 			# ax.axvline(x[lBndry], color='k')
 			# ax.axvline(x[rBndry], color='k')
@@ -449,7 +449,7 @@ class SineGordon(PDE):
 		Q = self.charge
 
 		# first filter out all the breathers
-		breatherIndicies = np.where(abs(solitonFrequency(eigenvalues)) > 1e-5)[0]
+		breatherIndicies = np.where(abs(np.vectorize(solitonFrequency)(eigenvalues)) > 1e-5)[0]
 		typedEigenvalues = [(l, 'Breather') for l in eigenvalues[breatherIndicies]]
 		eigenvalues = np.delete(eigenvalues, breatherIndicies)
 
@@ -569,9 +569,8 @@ class SineGordon(PDE):
 
 		return typedEigenvalues
 
-	def show_eigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', saveFile=None):
+	def show_eigenvalues(self, eigenvalues, saveFile=None):
 		import matplotlib.pyplot as plt
-		eigenvalues = self.boundStateEigenvalues(vRange, ODEIntMethod)
 		eigenvalues = self.typeEigenvalues(eigenvalues)
 		C = self.boundStateRegion(vRange)
 
