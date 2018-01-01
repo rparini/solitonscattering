@@ -328,7 +328,8 @@ class SineGordon(PDE):
 		roots = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims, attrs=rootsAttrs)
 
 		# create progressbar
-		if verbose:
+		makeProgressbar = verbose and rootsShape
+		if makeProgressbar:
 			from tqdm import trange
 			progressBar = trange(sum(rootsShape))
 
@@ -336,7 +337,7 @@ class SineGordon(PDE):
 		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
 			indexDict = dict([(key, index[i]) for i, key in enumerate(rootsCoords)])
 
-			if verbose:
+			if makeProgressbar:
 				coordDict = dict([(key, float(rootsCoords[key][index[i]])) for i, key in enumerate(rootsCoords)])
 				progressBar.set_description(desc='Computing eigenvalues for '+str(coordDict))
 
@@ -350,7 +351,7 @@ class SineGordon(PDE):
 			r, m = rootResult.roots, rootResult.multiplicities
 			roots[indexDict] = np.array(r)
 
-			if verbose:
+			if makeProgressbar:
 				progressBar.update()
 
 		return roots
