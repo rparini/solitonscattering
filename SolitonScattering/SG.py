@@ -11,12 +11,14 @@ import cxroots
 from .PDE import PDE, stateFunc, timeStepFunc
 
 #### Some useful equations
-solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
-solitonFrequency = lambda l: np.real(l)/np.abs(l)
-
-#### Exact solutions to the sine-Gordon Eq. ####
 gamma = lambda v: 1 / sqrt(1 - v ** 2)
 
+solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
+solitonFrequency = lambda l: np.real(l)/np.abs(l)
+solitonEnergy = lambda v: 8*gamma(v)
+breatherEnergy = lambda v, w: 16*gamma(v)/gamma(w)
+
+#### Exact solutions to the sine-Gordon Eq. ####
 @stateFunc
 def kink(x, t, v, x0, epsilon=1):
 	# epsilon = \pm 1
@@ -277,31 +279,16 @@ class SineGordon(PDE):
 
 		return xr.concat([E, 1j*E], dim='Phii')
 
-	def boundStateRegion(self, vRange):
-		from cxroots import AnnulusSector
-		# get the region in which to look for bound state eigenvalues
-		radiusBuffer = 0.05
-
-		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
-		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		mu = lambda v: 0.25j*sqrt((1-v)/(1+v))
-		phiRange = [0,pi]
-
-		radiusRange = np.sort(np.abs(mu(np.array(vRange))))
-		radiusRange = [radiusRange[0]-radiusBuffer,
-					   radiusRange[1]+radiusBuffer]
-		center = 0
-		return AnnulusSector(center, radiusRange, phiRange)
-
 	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, verbose=1):
 		# find the bound state eigenvalues of the 'x' part of the Lax pair
 		u = self.state['u'][selection]
 
 		# set custom defaults
 		rootFindingKwargs.setdefault('guessRootSymmetry', lambda z: [-z.conjugate()])	# roots occour either on the imaginary axis or in pairs with opposite real parts
-		rootFindingKwargs.setdefault('absTol', 1e-2)
-		rootFindingKwargs.setdefault('relTol', 1e-2)
-		rootFindingKwargs.setdefault('M', 3)
+		# rootFindingKwargs.setdefault('absTol', 1e-3)
+		# rootFindingKwargs.setdefault('relTol', 1e-3)
+		rootFindingKwargs.setdefault('M', 1)
+		rootFindingKwargs.setdefault('divMax', 10)
 		rootFindingKwargs.setdefault('intMethod', 'romb')
 
 		if verbose == 2:
@@ -325,7 +312,9 @@ class SineGordon(PDE):
 		rootsAttrs.update(rootFindingKwargs)
 		del rootsAttrs['verbose']	# no need to record verbose
 
-		roots = xr.DataArray(np.zeros(rootsShape, dtype=object), coords=rootsCoords, dims=rootsDims, attrs=rootsAttrs)
+		spectralData = xr.Dataset({'eigenvalues':(rootsDims, np.zeros(rootsShape, dtype=object)),
+								   'type':(rootsDims, np.zeros(rootsShape, dtype=object))},
+								   coords=rootsCoords, attrs=rootsAttrs)
 
 		# create progressbar
 		makeProgressbar = verbose and rootsShape
@@ -346,15 +335,25 @@ class SineGordon(PDE):
 
 			W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
 
-			C = self.boundStateRegion(vRange)
+			C = boundStateRegion(vRange)
 			rootResult = C.roots(W, **rootFindingKwargs)
 			r, m = rootResult.roots, rootResult.multiplicities
-			roots[indexDict] = np.array(r)
+			if r and np.any(np.array(m) != 1):
+				print(rootResult)
+				raise RuntimeError('Multiplicities are not all 1')
+
+			if rootsDims:
+				spectralData['eigenvalues'][indexDict] = np.array(r)
+				spectralData['type'][indexDict] = typeEigenvalues(r, u[indexDict])
+			else:
+				spectralData = xr.Dataset({'eigenvalues':('i',r),
+								   		   'type':('i',typeEigenvalues(r, u[indexDict]))},
+								   		   attrs=rootsAttrs)
 
 			if makeProgressbar:
 				progressBar.update()
 
-		return roots
+		return ScatteringData(spectralData)
 
 	@property
 	def indexLims(self):
@@ -420,19 +419,6 @@ class SineGordon(PDE):
 
 		return indexLims
 
-	@property
-	def charge(self):
-		# The topological charge of the field
-		x, u = self.state['x'], self.state['u']
-		Q = np.round(u/(2*pi))
-		Qerr = np.abs(u-2*pi*Q)
-
-		QerrIndicies = np.where(Qerr<1e-2)[0]
-		lBndry = QerrIndicies[0]
-		rBndry = QerrIndicies[-1]
-
-		return int(Q[rBndry]-Q[lBndry])
-
 	def plot_state(self, *args, **kwargs):
 		PDE.plot_state(self, *args, **kwargs)
 
@@ -445,145 +431,218 @@ class SineGordon(PDE):
 		plt.ylim(ylim)
 
 
-	def typeEigenvalues(self, eigenvalues):
-		# get the total field topological charge
-		Q = self.charge
+def charge(u):
+	# The topological charge of the field
+	Q = np.round(u/(2*pi))
+	Qerr = np.abs(u-2*pi*Q)
 
-		# first filter out all the breathers
-		breatherIndicies = np.where(abs(np.vectorize(solitonFrequency)(eigenvalues)) > 1e-5)[0]
-		typedEigenvalues = [(l, 'Breather') for l in eigenvalues[breatherIndicies]]
-		eigenvalues = np.delete(eigenvalues, breatherIndicies)
+	QerrIndicies = np.where(Qerr<1e-2)[0]
+	lBndry = QerrIndicies[0]
+	rBndry = QerrIndicies[-1]
 
-		if len(eigenvalues) == 1:
-			# if there's only one kink/antikink left look at the field's total topological charge
-			if Q == 1:
-				typedEigenvalues.append((eigenvalues[0], 'Kink'))
-			elif Q == -1:
-				typedEigenvalues.append((eigenvalues[0], 'Antikink'))
-
-			eigenvalues = np.delete(eigenvalues, 0)
+	return int(Q[rBndry]-Q[lBndry])
 
 
-		# elif len(untypedEigenvalues) == 2 and Q == 0 and not self.quickSoltype:
-		# 	# if there's two then it's a kink + antikink and we need to work out which is which
-		# 	# the only distingusing factor between the eigenvalues is the speed
-		# 	# so we'll estimate the speed the old fashioned way by running the time evolution a little more
+def typeEigenvalues(eigenvalues, u):
+	types = np.zeros_like(eigenvalues, dtype=object)
+	if len(types) == 0:
+		return types
+	else:
+		types[:] = ''
 
-		# 	if not hasattr(self, 'ut') or not hasattr(self, 'u'):
-		# 		# if we haven't saved the field then just run the time evolution until we have it
-		# 		self.get_rebounded(self.t)
+	# get the total field topological charge
+	Q = charge(u)
 
-		# 	def get_typedPositions(u, x):
-		# 		# get the positions of kinks and antikinks
+	# first filter out all the breathers
+	for i in np.where(abs(np.vectorize(solitonFrequency)(eigenvalues)) > 1e-5)[0]:
+		types[i] = 'Breather'
 
-		# 		# find where kinks and antikinks have their midpoint
-		# 		if u[np.abs(u).argmax()] > 0:
-		# 			midpoint = eq.roundNearest(u[0]) + pi
-		# 		elif u[np.abs(u).argmax()] < 0:
-		# 			midpoint = eq.roundNearest(u[0]) - pi
-
-		# 		# get the two points just above the kink/antikink midpoint
-		# 		try:
-		# 			pointsAboveMidpoint = (u[u > midpoint][0], u[u > midpoint][-1])
-		# 		except IndexError:
-		# 			# sometimes the kink and antikink are too close together
-		# 			return None
-
-		# 		# Interpolate to find the place where the field = midpoint
-		# 		typedPositions = {}
-		# 		for u1 in pointsAboveMidpoint:
-		# 			index1 = np.abs(u - u1).argmin()
-		# 			index0 = index1 - 1
-		# 			x0, x1 = x[index0], x[index1]
-		# 			u0 = u[index0]
-
-		# 			ux = (u1 - u0) / (x1 - x0)
-		# 			if ux > 0:
-		# 				soltype = 'Kink'
-		# 			else:
-		# 				soltype = 'Antikink'
-
-		# 			solpos = x0 + (x1 - x0) * (midpoint - u0) / (u1 - u0)
-		# 			typedPositions[soltype] = solpos
-
-		# 		try:
-		# 			typedPositions['Kink']
-		# 			typedPositions['Antikink']
-		# 		except KeyError:
-		# 			return None
-
-		# 		return typedPositions
-
-		# 	# get the initial position of the kink and antikink
-		# 	typedPos0 = get_typedPositions(self.u, self.x)
-		# 	if typedPos0 == None:
-		# 		# can't figure out which eigenvalue is which
-		# 		for eigenvalue in untypedEigenvalues:
-		# 			typedEigenvalues.append((eigenvalue, 'Unknown'))
-		# 		return typedEigenvalues
+	if len(np.where(types=='')[0]) == 1:
+		# if there's only one kink/antikink left look at the field's total topological charge
+		if Q == 1:
+			types[np.where(types=='')[0]] = 'Kink'
+		elif Q == -1:
+			types[np.where(types=='')[0]] = 'Antikink'
 
 
-		# 	# run the time evolution
-		# 	k = self.parameters[1]
-		# 	timeStep = SG.timeStepGen(self.x[0], self.x[-1], self.Options['pointDensity'], self.t,
-		# 							  inf, self.Options['dt'], self.u, self.ut, self.Options['boundaryType'], k, xi = self.xi)
+	# elif len(untypedEigenvalues) == 2 and Q == 0 and not self.quickSoltype:
+	# 	# if there's two then it's a kink + antikink and we need to work out which is which
+	# 	# the only distingusing factor between the eigenvalues is the speed
+	# 	# so we'll estimate the speed the old fashioned way by running the time evolution a little more
 
-		# 	t, t0 = self.t, self.t
-		# 	u, x = self.u, self.x
-		# 	while t < t0 + 10 or get_typedPositions(u, x) == None:
-		# 		(u,ut,t,x) = timeStep.next()
-		# 	t1 = t
+	# 	if not hasattr(self, 'ut') or not hasattr(self, 'u'):
+	# 		# if we haven't saved the field then just run the time evolution until we have it
+	# 		self.get_rebounded(self.t)
 
-		# 	# from matplotlib import pyplot as plt
-		# 	# print t1
-		# 	# plt.plot(x,u)
-		# 	# plt.show()
+	# 	def get_typedPositions(u, x):
+	# 		# get the positions of kinks and antikinks
 
-		# 	# get the position of the kink and antikink at t1
-		# 	typedPos1 = get_typedPositions(u, x)
+	# 		# find where kinks and antikinks have their midpoint
+	# 		if u[np.abs(u).argmax()] > 0:
+	# 			midpoint = eq.roundNearest(u[0]) + pi
+	# 		elif u[np.abs(u).argmax()] < 0:
+	# 			midpoint = eq.roundNearest(u[0]) - pi
 
-		# 	# work out the speed
-		# 	kinkSpeed = (typedPos1['Kink'] - typedPos0['Kink']) / (t1 - t0)
-		# 	antikinkSpeed = (typedPos1['Antikink'] - typedPos0['Antikink']) / (t1 - t0)
+	# 		# get the two points just above the kink/antikink midpoint
+	# 		try:
+	# 			pointsAboveMidpoint = (u[u > midpoint][0], u[u > midpoint][-1])
+	# 		except IndexError:
+	# 			# sometimes the kink and antikink are too close together
+	# 			return None
 
-		# 	# now match the manual speed with the eigenvalue speed
-		# 	eigenvalueSpeed    = np.vectorize(solitonVelocity)(untypedEigenvalues)
-		# 	kinkEigenvalue     = untypedEigenvalues.pop(np.abs(eigenvalueSpeed - kinkSpeed).argmin())
-		# 	typedEigenvalues.append((kinkEigenvalue, 'Kink'))
+	# 		# Interpolate to find the place where the field = midpoint
+	# 		typedPositions = {}
+	# 		for u1 in pointsAboveMidpoint:
+	# 			index1 = np.abs(u - u1).argmin()
+	# 			index0 = index1 - 1
+	# 			x0, x1 = x[index0], x[index1]
+	# 			u0 = u[index0]
 
-		# 	eigenvalueSpeed    = np.vectorize(solitonVelocity)(untypedEigenvalues)
-		# 	antikinkEigenvalue = untypedEigenvalues.pop(np.abs(eigenvalueSpeed - antikinkSpeed).argmin())
-		# 	typedEigenvalues.append((antikinkEigenvalue, 'Antikink'))
+	# 			ux = (u1 - u0) / (x1 - x0)
+	# 			if ux > 0:
+	# 				soltype = 'Kink'
+	# 			else:
+	# 				soltype = 'Antikink'
 
-		# elif len(untypedEigenvalues) == abs(q):
-		# 	# we've probably got a series of kinks/antikinks
-		# 	for i in xrange(abs(q)):
-		# 		eigenvalue = untypedEigenvalues.pop(0)
-		# 		if Q > 0:
-		# 			typedEigenvalues.append((eigenvalue, 'Kink'))
-		# 		elif Q < 0:
-		# 			typedEigenvalues.append((eigenvalue, 'Antikink'))
+	# 			solpos = x0 + (x1 - x0) * (midpoint - u0) / (u1 - u0)
+	# 			typedPositions[soltype] = solpos
 
-		# if there are any eigenvalues left then they are unknown
-		for eigenvalue in eigenvalues:
-			typedEigenvalues.append((eigenvalue, 'Unknown'))
+	# 		try:
+	# 			typedPositions['Kink']
+	# 			typedPositions['Antikink']
+	# 		except KeyError:
+	# 			return None
 
-		return typedEigenvalues
+	# 		return typedPositions
 
-	def show_eigenvalues(self, eigenvalues, saveFile=None):
+	# 	# get the initial position of the kink and antikink
+	# 	typedPos0 = get_typedPositions(self.u, self.x)
+	# 	if typedPos0 == None:
+	# 		# can't figure out which eigenvalue is which
+	# 		for eigenvalue in untypedEigenvalues:
+	# 			typedEigenvalues.append((eigenvalue, 'Unknown'))
+	# 		return typedEigenvalues
+
+
+	# 	# run the time evolution
+	# 	k = self.parameters[1]
+	# 	timeStep = SG.timeStepGen(self.x[0], self.x[-1], self.Options['pointDensity'], self.t,
+	# 							  inf, self.Options['dt'], self.u, self.ut, self.Options['boundaryType'], k, xi = self.xi)
+
+	# 	t, t0 = self.t, self.t
+	# 	u, x = self.u, self.x
+	# 	while t < t0 + 10 or get_typedPositions(u, x) == None:
+	# 		(u,ut,t,x) = timeStep.next()
+	# 	t1 = t
+
+	# 	# from matplotlib import pyplot as plt
+	# 	# print t1
+	# 	# plt.plot(x,u)
+	# 	# plt.show()
+
+	# 	# get the position of the kink and antikink at t1
+	# 	typedPos1 = get_typedPositions(u, x)
+
+	# 	# work out the speed
+	# 	kinkSpeed = (typedPos1['Kink'] - typedPos0['Kink']) / (t1 - t0)
+	# 	antikinkSpeed = (typedPos1['Antikink'] - typedPos0['Antikink']) / (t1 - t0)
+
+	# 	# now match the manual speed with the eigenvalue speed
+	# 	eigenvalueSpeed    = np.vectorize(solitonVelocity)(untypedEigenvalues)
+	# 	kinkEigenvalue     = untypedEigenvalues.pop(np.abs(eigenvalueSpeed - kinkSpeed).argmin())
+	# 	typedEigenvalues.append((kinkEigenvalue, 'Kink'))
+
+	# 	eigenvalueSpeed    = np.vectorize(solitonVelocity)(untypedEigenvalues)
+	# 	antikinkEigenvalue = untypedEigenvalues.pop(np.abs(eigenvalueSpeed - antikinkSpeed).argmin())
+	# 	typedEigenvalues.append((antikinkEigenvalue, 'Antikink'))
+
+	# elif len(untypedEigenvalues) == abs(q):
+	# 	# we've probably got a series of kinks/antikinks
+	# 	for i in xrange(abs(q)):
+	# 		eigenvalue = untypedEigenvalues.pop(0)
+	# 		if Q > 0:
+	# 			typedEigenvalues.append((eigenvalue, 'Kink'))
+	# 		elif Q < 0:
+	# 			typedEigenvalues.append((eigenvalue, 'Antikink'))
+
+	# if there are any eigenvalues left then they are unknown
+	for i in np.where(types=='')[0]:
+		types[i] = 'Unknown'
+
+	return types
+
+def boundStateRegion(vRange):
+	from cxroots import AnnulusSector
+	# get the region in which to look for bound state eigenvalues
+	radiusBuffer = 0.05
+
+	# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
+	# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
+	mu = lambda v: 0.25j*sqrt((1-v)/(1+v))
+	phiRange = [0,pi]
+
+	radiusRange = np.sort(np.abs(mu(np.array(vRange))))
+	radiusRange = [radiusRange[0]-radiusBuffer,
+				   radiusRange[1]+radiusBuffer]
+	center = 0
+	return AnnulusSector(center, radiusRange, phiRange)
+
+class ScatteringData(object):
+	def __init__(self, xarray):
+		self.xarray = xarray
+
+	def __str__(self):
+		roots = self.xarray['eigenvalues'].values
+		if len(roots) == 0:
+			return 'No bound state eigenvalues'
+
+		types = self.xarray['type'].data
+		velocity = solitonVelocity(roots)
+		frequency = solitonFrequency(roots)
+		energy = np.array([breatherEnergy(velocity[i], frequency[i]) if types[i]=='Breather' else solitonEnergy(velocity[i]) for i in range(len(roots))])
+
+		# sort eigenvalues by energy in decending order
+		sortargs = np.argsort(energy)[::-1]
+		roots, types, velocity, frequency, energy = roots[sortargs], types[sortargs], velocity[sortargs], frequency[sortargs], energy[sortargs]
+
+		s =  '     Type     |           Eigenvalues           |  Velocity  | Frequency |  Energy  '
+		s+='\n------------------------------------------------------------------------------------'
+
+		skipNextBreather = False
+		for i, root in enumerate(roots):
+			if types[i] == 'Breather':
+				if skipNextBreather:
+					skipNextBreather = False
+					continue
+
+				if abs(root.real + roots[i+1].real) < 1e-8 and abs(root.imag - roots[i+1].imag) < 1e-8:
+					skipNextBreather = True
+
+			if types[i] == 'Breather':
+				s += '\n{: ^14s}| ±{:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], abs(root.real), root.imag, velocity[i].real, abs(frequency[i]), energy[i])
+			elif root.real < 0:
+				s += '\n{: ^14s}| {:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], root.real, root.imag, velocity[i].real, abs(frequency[i]), energy[i])
+			else:
+				s += '\n{: ^14s}|  {:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], root.real, root.imag, velocity[i].real, abs(frequency[i]), energy[i])
+
+		return s
+
+	def show(self, saveFile=None):
 		import matplotlib.pyplot as plt
-		eigenvalues = self.typeEigenvalues(eigenvalues)
-		C = self.boundStateRegion(vRange)
+		types = self.xarray['type'].data
 
-		colorDict = {'Kink':'b', 
-					 'Antikink':'r', 
-					 'Breather':'g', 
-					 'Unknown':'k'}
+
+		C = boundStateRegion(self.xarray.attrs['vRange'])
+
+		colorDict = {'Kink':'C0', 
+					 'Antikink':'C3', 
+					 'Breather':'C2', 
+					 'Unknown':'C7'}
 
 		path = C(np.linspace(0,1,1e3))
 		plt.plot(path.real, path.imag, linestyle='--', color='k')
-		for e, t in eigenvalues:
-			plt.scatter(e.real, e.imag, color=colorDict[t])
+		for i, e in enumerate(self.xarray['eigenvalues'].values):
+			plt.scatter(e.real, e.imag, color=colorDict[types[i]])
 
 		ax = plt.gca()
 		ax.set_aspect(1)
@@ -599,3 +658,4 @@ class SineGordon(PDE):
 			plt.close()
 		else:
 			plt.show()
+
