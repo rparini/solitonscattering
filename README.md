@@ -10,5 +10,8 @@ and determining the solitons in the reflected field by computing part of the sca
  python install setup.py
  ``` 
 
+### Examples
+* [Sine-Gordon soliton colliding with a Robin boundary](examples/Robin.ipynb)
+
 ### References
 [1] Robert Arthur, Patrick Dorey, Robert Parini ["Breaking integrability at the boundary: the sine-Gordon model with Robin boundary conditions"](https://arxiv.org/abs/1509.08448), *Journal of Physics A*, Volume 49, Number 16, 2016
