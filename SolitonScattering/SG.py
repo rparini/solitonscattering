@@ -320,7 +320,7 @@ class SineGordon(PDE):
 		makeProgressbar = verbose and rootsShape
 		if makeProgressbar:
 			from tqdm import trange
-			progressBar = trange(sum(rootsShape))
+			progressBar = trange(np.prod(rootsShape))
 
 		# compute the roots
 		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
