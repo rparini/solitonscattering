@@ -312,9 +312,9 @@ class SineGordon(PDE):
 		rootsAttrs.update(rootFindingKwargs)
 		del rootsAttrs['verbose']	# no need to record verbose
 
-		spectralData = xr.Dataset({'eigenvalues':(rootsDims, np.zeros(rootsShape, dtype=object)),
-								   'type':(rootsDims, np.zeros(rootsShape, dtype=object))},
-								   coords=rootsCoords, attrs=rootsAttrs)
+		# arrays to store eigenvalues and types of eigenvalues
+		eigenvalue_array = np.zeros(rootsShape, dtype=object)
+		type_array = np.zeros(rootsShape, dtype=object)
 
 		# create progressbar
 		makeProgressbar = verbose and rootsShape
@@ -323,6 +323,8 @@ class SineGordon(PDE):
 			progressBar = trange(np.prod(rootsShape))
 
 		# compute the roots
+		maxNumberOfEigenvalues = 0
+		maxTypeStringSize = 0
 		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
 			indexDict = dict([(key, index[i]) for i, key in enumerate(rootsCoords)])
 
@@ -342,16 +344,38 @@ class SineGordon(PDE):
 				print(rootResult)
 				raise RuntimeError('Multiplicities are not all 1')
 
-			if rootsDims:
-				spectralData['eigenvalues'][indexDict] = np.array(r)
-				spectralData['type'][indexDict] = typeEigenvalues(r, u[indexDict])
-			else:
-				spectralData = xr.Dataset({'eigenvalues':('i',r),
-								   		   'type':('i',typeEigenvalues(r, u[indexDict]))},
-								   		   attrs=rootsAttrs)
+			eigenvalue_array[index] = r
+			type_array[index] = typeEigenvalues(r, u[indexDict])
+
+			# update maxNumberOfEigenvalues
+			if len(r) > maxNumberOfEigenvalues:
+				maxNumberOfEigenvalues = len(r)
+
+			# update maxTypeStringSize
+			for rootType in type_array[index]:
+				if len(rootType) > maxTypeStringSize:
+					maxTypeStringSize = len(rootType)
 
 			if makeProgressbar:
 				progressBar.update()
+
+		# pad out eigenvalue array so that it can be stored as a single complex-valued array
+		arrayShape = rootsShape + [maxNumberOfEigenvalues]
+		arrayDims = rootsDims + ['eigenvalue_index']
+
+		padded_eigenvalue_array = np.zeros(arrayShape, dtype=np.complex128)
+		padded_type_array = np.zeros(arrayShape, dtype=np.dtype(('U', maxTypeStringSize)))
+		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
+			pad = np.empty(maxNumberOfEigenvalues - len(eigenvalue_array[index]))
+			pad.fill(np.nan)
+
+			padded_eigenvalue_array[index] = np.append(eigenvalue_array[index], pad)
+			padded_type_array[index] = np.append(type_array[index], pad)
+
+		# put eigenvalue and type arrays into an xarray Dataset
+		spectralData = xr.Dataset({'eigenvalues':(arrayDims, padded_eigenvalue_array),
+								   'types':(arrayDims, padded_type_array)},
+								   coords=rootsCoords, attrs=rootsAttrs)
 
 		return ScatteringData(spectralData)
 
@@ -587,50 +611,64 @@ def boundStateRegion(vRange):
 	center = 0
 	return AnnulusSector(center, radiusRange, phiRange)
 
+def print_eigenvalues(roots, types):
+	if len(roots) == 0:
+		return 'No bound state eigenvalues'
+
+	velocity = solitonVelocity(roots)
+	frequency = solitonFrequency(roots)
+	energy = np.array([breatherEnergy(velocity[i], frequency[i]) if types[i]=='Breather' else solitonEnergy(velocity[i]) for i in range(len(roots))])
+
+	# sort eigenvalues by energy in decending order
+	sortargs = np.argsort(energy)[::-1]
+	roots, types, velocity, frequency, energy = roots[sortargs], types[sortargs], velocity[sortargs], frequency[sortargs], energy[sortargs]
+
+	s =  '     Type     |           Eigenvalues           |  Velocity  | Frequency |  Energy  '
+	s+='\n------------------------------------------------------------------------------------'
+
+	skipNextBreather = False
+	for i, root in enumerate(roots):
+		if np.isnan(root):
+			continue
+
+		if types[i] == 'Breather':
+			if skipNextBreather:
+				skipNextBreather = False
+				continue
+
+			if abs(root.real + roots[i+1].real) < 1e-8 and abs(root.imag - roots[i+1].imag) < 1e-8:
+				skipNextBreather = True
+
+		if types[i] == 'Breather':
+			s += '\n{: ^14s}| ±{:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], abs(root.real), root.imag, velocity[i].real, abs(frequency[i]), energy[i])
+		elif root.real < 0:
+			s += '\n{: ^14s}| {:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], root.real, root.imag, velocity[i].real, abs(frequency[i]), energy[i])
+		else:
+			s += '\n{: ^14s}|  {:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], root.real, root.imag, velocity[i].real, abs(frequency[i]), energy[i])
+
+	return s
+
+
 class ScatteringData(object):
 	def __init__(self, xarray):
 		self.xarray = xarray
 
 	def __str__(self):
-		roots = self.xarray['eigenvalues'].values
-		if len(roots) == 0:
-			return 'No bound state eigenvalues'
+		if len(self.xarray['eigenvalues'].dims) == 1:
+			return print_eigenvalues(self.xarray['eigenvalues'].values, self.xarray['types'].data)
 
-		types = self.xarray['type'].data
-		velocity = solitonVelocity(roots)
-		frequency = solitonFrequency(roots)
-		energy = np.array([breatherEnergy(velocity[i], frequency[i]) if types[i]=='Breather' else solitonEnergy(velocity[i]) for i in range(len(roots))])
-
-		# sort eigenvalues by energy in decending order
-		sortargs = np.argsort(energy)[::-1]
-		roots, types, velocity, frequency, energy = roots[sortargs], types[sortargs], velocity[sortargs], frequency[sortargs], energy[sortargs]
-
-		s =  '     Type     |           Eigenvalues           |  Velocity  | Frequency |  Energy  '
-		s+='\n------------------------------------------------------------------------------------'
-
-		skipNextBreather = False
-		for i, root in enumerate(roots):
-			if types[i] == 'Breather':
-				if skipNextBreather:
-					skipNextBreather = False
-					continue
-
-				if abs(root.real + roots[i+1].real) < 1e-8 and abs(root.imag - roots[i+1].imag) < 1e-8:
-					skipNextBreather = True
-
-			if types[i] == 'Breather':
-				s += '\n{: ^14s}| ±{:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], abs(root.real), root.imag, velocity[i].real, abs(frequency[i]), energy[i])
-			elif root.real < 0:
-				s += '\n{: ^14s}| {:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], root.real, root.imag, velocity[i].real, abs(frequency[i]), energy[i])
-			else:
-				s += '\n{: ^14s}|  {:.12f} {:+.12f}i|{: ^12f}|{: ^11f}|{: ^10f}'.format(types[i], root.real, root.imag, velocity[i].real, abs(frequency[i]), energy[i])
-
-		return s
+		else:
+			s = ''
+			for index, dummy in np.ndenumerate(np.empty(self.xarray['eigenvalues'].shape[:-1])):
+				indexDict = dict([(key, index[i]) for i, key in enumerate(self.xarray.coords)])
+				coordDict = dict([(key, float(self.xarray.coords[key][index[i]])) for i, key in enumerate(self.xarray.coords)])
+				s += '\n' + str(coordDict) + '\n'
+				s += print_eigenvalues(self.xarray['eigenvalues'][index].data, self.xarray['types'][index].data) + '\n'
+			return s
 
 	def show(self, saveFile=None):
 		import matplotlib.pyplot as plt
 		types = self.xarray['type'].data
-
 
 		C = boundStateRegion(self.xarray.attrs['vRange'])
 
