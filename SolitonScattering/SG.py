@@ -668,7 +668,7 @@ class ScatteringData(object):
 
 	def show(self, saveFile=None):
 		import matplotlib.pyplot as plt
-		types = self.xarray['type'].data
+		types = self.xarray['types'].data
 
 		C = boundStateRegion(self.xarray.attrs['vRange'])
 
