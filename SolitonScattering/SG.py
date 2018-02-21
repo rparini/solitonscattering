@@ -197,7 +197,7 @@ class SineGordon(PDE):
 			if multiple == -1:
 				return '$-\pi$'
 			elif multiple == 0:
-				return '0'
+				return '$0$'
 			elif multiple == 1:
 				return '$\pi$'
 			return '$'+str(multiple)+r'\pi$'
