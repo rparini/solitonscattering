@@ -458,8 +458,7 @@ class SineGordon(PDE):
 			# ax.axvline(x[rBndry], color='k')
 			# plt.show()
 
-			indexLims[indexDict] = lBndry, rBndry
-
+			indexLims[indexDict][:] = np.array([lBndry, rBndry], dtype=int)
 		return indexLims
 
 	def plot_state(self, *args, **kwargs):
