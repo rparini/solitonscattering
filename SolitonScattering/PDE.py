@@ -85,14 +85,15 @@ def timeStepFunc(stepFunc):
 		newVals = stepFunc(**funcArgs)
 
 		# Update attributes
-		for key in newVals.copy():
+		for key in newVals:
 			if key in state.attrs:
-				state.attrs[key] = newVals.pop(key)
+				state.attrs[key] = newVals[key]
 
-		oldSize = [state[key].size for key in newVals]
-		newSize = [newVals[key].size for key in newVals]
+		oldSize = [state[key].size for key in newVals if key not in state.attrs]
+		newSize = [newVals[key].size for key in newVals if key not in state.attrs]
 		if np.any(oldSize != newSize):
-			# the size of the state has changed so we need to build a new one
+			# the size of the state has changed so we need to create a new one
+			# doesn't seem possible to update state 'in place' with the new coordinates
 			state = xr.Dataset(data_vars = dict((key, newVals[key]) for key in state.data_vars.keys()), 
 							   attrs = state.attrs)
 
