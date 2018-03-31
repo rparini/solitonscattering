@@ -269,7 +269,7 @@ class PDE(object):
 
 		self.setticks()
 
-		plt.ylabel('$u$')
+		plt.ylabel('$u$', rotation=0)
 		plt.xlabel('$x$')
 
 	def show(self, saveFile=None, **kwargs):
@@ -290,11 +290,12 @@ class PDE(object):
 		from matplotlib import pyplot as plt
 		from matplotlib import animation
 
-		fig = plt.figure()
-		ax = plt.axes(xlim=(self.state['x'].values[0], self.state['x'].values[-1]), ylim=(-2, 10))
+		fig = plt.gcf()
+		ax = plt.gca()
+		plt.xlim(self.state['x'].values[0], self.state['x'].values[-1])
 		line, = ax.plot([], [])
 		if ylim is not None:
-			plt.yrange = ylim
+			ax.set_ylim(ylim[0],ylim[-1])
 		self.setticks()
 
 		timeLabel = ax.text(0.05, 0.9, '', transform=ax.transAxes)
@@ -319,7 +320,7 @@ class PDE(object):
 		# call the animator
 		frames = saveAnimationDict.pop('frames', None)
 		if frames is not None:
-			frames = frames//(skipFrames+1)
+			frames = 1+frames//(skipFrames+1)
 		anim = animation.FuncAnimation(fig, update_animation, init_func=init, interval=20, blit=True, frames=frames)
 
 		if saveAnimationDict:
