@@ -357,8 +357,7 @@ class PDE(object):
 		yRShape.append(len(muList))
 		yRShape.append(2)
 
-		yR = np.zeros(yRShape, dtype=np.complex128)
-		yR = xr.DataArray(yR, coords=yRCoords, dims=yRDims)
+		yR = xr.DataArray(np.zeros(yRShape, dtype=np.complex128), coords=yRCoords, dims=yRDims)
 
 		VFull = self.xLax(muList, selection=selection)
 
