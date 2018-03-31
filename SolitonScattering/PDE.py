@@ -103,9 +103,10 @@ def timeStepFunc(stepFunc):
 
 
 class PDE(object):
-	def __init__(self, state):
-		self.state     = state
-		self._initialState = deepcopy(state)
+	def __init__(self, state, saveInitialState=False):
+		self.state = state
+		if saveInitialState:
+			self._initialState = deepcopy(state)
 
 	@property
 	def state(self):
