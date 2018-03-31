@@ -241,8 +241,9 @@ class SineGordon(PDE):
 		# as a (1,2,2) matrix where the x is along the first axis
 		u, ut, ux = self.state['u'][selection], self.state['ut'][selection], self.ux[selection]
 
-		# make mu a DataArray
-		mu = xr.DataArray(np.array(mu), coords={'mu':np.array(mu)}, dims=('mu'))
+		if hasattr(mu, '__iter__'):
+			# make mu a DataArray
+			mu = xr.DataArray(np.array(mu), coords={'mu':np.array(mu)}, dims=('mu'))
 
 		w = ut + ux
 
@@ -270,7 +271,8 @@ class SineGordon(PDE):
 	def left_asyptotic_eigenfunction(self, mu, x):
 		# return the asymptotic value of the bound state eigenfunction as x -> -inf
 		from xarray.ufuncs import exp
-		mu = xr.DataArray(mu, [('mu', mu)])
+		if hasattr(mu, '__iter__'):
+			mu = xr.DataArray(mu, [('mu', mu)])
 
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
 		# E = exp((mu+1/(16*mu))*x)
@@ -284,7 +286,8 @@ class SineGordon(PDE):
 	def right_asyptotic_eigenfunction(self, mu, x):
 		# return the asymptotic value of the bound state eigenfunction as x -> +inf
 		from xarray.ufuncs import exp
-		mu = xr.DataArray(mu, [('mu', mu)])
+		if hasattr(mu, '__iter__'):
+			mu = xr.DataArray(mu, [('mu', mu)])
 
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
 		# E = exp(-(mu+1/(16*mu))*x)
