@@ -7,6 +7,7 @@ from warnings import warn
 import inspect
 import math
 import xarray as xr
+import itertools
 
 from . import ODE
 
@@ -146,19 +147,89 @@ class PDE(object):
 		# reset the state of the field to the state it was in when the instance was first initilized
 		self.state = self._initialState
 
-	def time_evolve(self, tFin, progressBar=True, **timeStepArgs):
-		# pass the time step function the current state and any additional given arguments
-		if progressBar and 'dt' in timeStepArgs:
-			from tqdm import trange
-			dt = timeStepArgs['dt']
-			t = getval(self.state, 't')
-			N = math.ceil((tFin-t)/dt)
-			for n in trange(N, desc='Time Evolution'):
-				self.state = self.time_step(self.state, **timeStepArgs)	
+	def time_evolve(self, tFin, progressBar=True, callbackFunc=None, **timeStepArgs):
+		# tFin should be a real number or a function which returns a real number
+		# if a function then the inputs of that function should be found in the
+		# coordinates or attributes of self.state
 
+		if callable(tFin):
+			### create an array storing the values of tFin for each parameter
+
+			# get arguments to pass to tFin function
+			tFinArgNames = inspect.getargspec(tFin)[0]
+			tFinArgs = []	# should be a list of DataArrays
+			tFinKwargs = {} # for arguments which are not arrays
+			for tFinArgName in tFinArgNames:
+				if tFinArgName in timeStepArgs.keys():
+					tFinArg = timeStepArgs[tFinArgName]
+				else:
+					val = getval(self.state, tFinArgName)
+					if getval(self.state, tFinArgName) is None:
+						raise ValueError("Names of tFin arguments should be coordinates or attributes of the field state\n\
+							or the names of arguments of time_evolve which have been passed as numpy arrays.")
+					tFinArg = getval(self.state, tFinArgName)
+
+				if isnparray(tFinArg) or isinstance(tFinArg, xr.core.dataarray.DataArray):
+					tFinArgs.append(xr.DataArray(tFinArg, dims=tFinArgName))
+				else:
+					tFinKwargs.update({tFinArgName:tFinArg})
+
+			# create array of tFin
+			tFin = xr.apply_ufunc(tFin, *tFinArgs, kwargs=tFinKwargs)
+
+
+			
+		### store values of t as an array if necessary
+		### XXX: doesn't seem to be an isxarray()
+		t = getval(self.state, 't')
+		if isinstance(tFin, xr.core.dataarray.DataArray) and not isinstance(t, xr.core.dataarray.DataArray):
+			# copy the parameters from self.state
+			# (the parameters in timeStepArgs will be added in the timeStepFunc wrapper)
+			timeDims = [dim for dim in self.state.dims if dim != 'x']
+			timeCoords = [self.state.coords[dim] for dim in timeDims]
+
+			# populate time array with current time
+			t = self.state.attrs['t']
+			timeArrayShape = list(map(len, timeCoords))
+			tArray = xr.DataArray(np.ones(timeArrayShape)*t, coords=timeCoords, dims=timeDims)
+			
+			# Add time array to the self.state and remove time attribute
+			del self.state.attrs['t']
+			self.state['t'] = tArray
+			t = getval(self.state, 't')
+
+		### Set up the progress bar
+		if progressBar and 'dt' in timeStepArgs:
+			from tqdm import tqdm
+			dt = timeStepArgs['dt']
+			N = math.ceil(np.max(tFin-t)/dt)
+			pBar = tqdm(total=N, desc='Time Evolution')
 		else:
-			while getval(self.state, 't') < tFin:
-				self.state = self.time_step(self.state, **timeStepArgs)	
+			progressBar = False
+			
+		while np.any(t < tFin):
+			# pass the time step function the current state and any additional given arguments
+			if isinstance(t, xr.core.dataarray.DataArray):
+				newstate = self.time_step(self.state.where(t < tFin), **timeStepArgs)
+
+				# replace nan with old state
+				self.state = newstate.fillna(self.state)
+			
+			else:
+				self.state = self.time_step(self.state, **timeStepArgs)
+
+			t = getval(self.state, 't')
+
+			if progressBar:
+				pBar.update()
+
+			if callbackFunc is not None:
+				exit = callbackFunc(self)
+				if exit:
+					return
+
+		if progressBar:
+			pBar.close()
 
 	def setticks(self):
 		pass
