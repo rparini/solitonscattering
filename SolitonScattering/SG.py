@@ -1,7 +1,7 @@
 from __future__ import division
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
-from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log
+from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log, arctan2, sinh, tanh
 from warnings import warn
 import xarray as xr
 import math
@@ -11,7 +11,7 @@ import cxroots
 from .PDE import PDE, stateFunc, timeStepFunc
 
 #### Some useful equations
-gamma = lambda v: 1 / sqrt(1 - v ** 2)
+gamma = lambda v: 1/sqrt(1 - v**2)
 
 solitonVelocity = lambda l: (1-16*np.abs(l)**2)/(1+16*np.abs(l)**2)
 solitonFrequency = lambda l: np.real(l)/np.abs(l)
@@ -27,6 +27,22 @@ def kink(x, t, v, x0, epsilon=1):
 	ut = -2*epsilon*g*v / cosh(epsilon*g*(x-x0-v*t))
 	return {'u':u, 'ut':ut}
 
+@stateFunc
+def breather(x, t, v, w, x0, xi = -pi/2):
+	W = sqrt(1-w**2)
+	g = 1/sqrt(1-v**2)
+	Sin = sin(w*g*(t-v*(x-x0)) + xi)
+	Cosh = cosh(W*g*(x-x0-v*t))
+
+	u = 4*arctan2(W*Sin/w, Cosh)
+
+	Cos = cos(w*g*(t-v*(x-x0)) + xi)
+	Tanh = tanh(W*g*(x-x0-v*t))
+	N = v*W**2*Sin*Tanh + w*W*Cos
+	D = (W*Sin/Cosh)**2 + w**2
+
+	ut = 4*w*g/Cosh * N/D
+	return {'u':u, 'ut':ut}
 
 # def init_magnetic(x, v0, k, x0):
 # 	if k != 0:
