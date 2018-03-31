@@ -103,23 +103,9 @@ def timeStepFunc(stepFunc):
 
 
 class PDE(object):
-	def __init__(self, timeStepFunc, state):
+	def __init__(self, state):
 		self.state     = state
 		self._initialState = deepcopy(state)
-		self.time_step = timeStepFunc
-
-	@property
-	def time_step(self):
-		return self._time_step
-
-	@time_step.setter
-	def time_step(self, timeStep):
-		if type(timeStep) == str:
-			# if a name of a time step function is given then return that
-			self._time_step = self.named_timeStepFuncs[timeStep]
-		else:
-			# set the time step funciton as the given function
-			self._time_step = timeStep
 
 	@property
 	def state(self):
@@ -147,10 +133,14 @@ class PDE(object):
 		# reset the state of the field to the state it was in when the instance was first initilized
 		self.state = self._initialState
 
-	def time_evolve(self, tFin, progressBar=True, callbackFunc=None, **timeStepArgs):
+	def time_evolve(self, timeStepFunc, tFin, progressBar=True, callbackFunc=None, **timeStepArgs):
 		# tFin should be a real number or a function which returns a real number
 		# if a function then the inputs of that function should be found in the
 		# coordinates or attributes of self.state
+
+		if type(timeStepFunc) == str:
+			# if a name of a time step function is given then return that
+			timeStepFunc = self.named_timeStepFuncs[timeStepFunc]
 
 		if callable(tFin):
 			### create an array storing the values of tFin for each parameter
@@ -210,13 +200,13 @@ class PDE(object):
 		while np.any(t < tFin):
 			# pass the time step function the current state and any additional given arguments
 			if isinstance(t, xr.core.dataarray.DataArray):
-				newstate = self.time_step(self.state.where(t < tFin), **timeStepArgs)
+				newstate = timeStepFunc(self.state.where(t < tFin), **timeStepArgs)
 
 				# replace nan with old state
 				self.state = newstate.fillna(self.state)
 			
 			else:
-				self.state = self.time_step(self.state, **timeStepArgs)
+				self.state = timeStepFunc(self.state, **timeStepArgs)
 
 			t = getval(self.state, 't')
 
@@ -286,9 +276,13 @@ class PDE(object):
 		saveAnimationDict = {'filename':saveFile, 'fps':fps, 'frames':frames, 'writer':writer, 'dpi':dpi, 'codec':codec}
 		self.show_animation(ylim=ylim, saveAnimationDict = saveAnimationDict, **timeStepArgs)
 
-	def show_animation(self, skipFrames = 0, ylim=None, saveAnimationDict = {}, **timeStepArgs):
+	def show_animation(self, timeStepFunc, skipFrames = 0, ylim=None, saveAnimationDict = {}, **timeStepArgs):
 		from matplotlib import pyplot as plt
 		from matplotlib import animation
+
+		if type(timeStepFunc) == str:
+			# if a name of a time step function is given then return that
+			timeStepFunc = self.named_timeStepFuncs[timeStepFunc]
 
 		fig = plt.gcf()
 		ax = plt.gca()
@@ -311,7 +305,7 @@ class PDE(object):
 		def update_animation(i):
 			for k in range(skipFrames+1):
 				# step the time evolution forward
-				self.state = self.time_step(self.state, **timeStepArgs)
+				self.state = timeStepFunc(self.state, **timeStepArgs)
 
 			line.set_data(self.state['x'], self.state['u'])
 			timeLabel.set_text('$t$ = %.1f' % self.state.attrs['t'])
