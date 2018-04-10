@@ -4,3 +4,4 @@ cxroots
 matplotlib
 tqdm
 cython
+h5netcdf

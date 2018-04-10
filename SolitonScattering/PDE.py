@@ -122,6 +122,9 @@ class PDE(object):
 		if 'solName' in stateVal:
 			# if a name of a solution is given then use that function name to create the state
 			self._state = self.named_solutions[stateVal.pop('solName')](**stateVal)
+		elif type(stateVal) == str:
+			# load from disk
+			self.state = xr.open_dataset(stateVal, engine='h5netcdf')
 
 		stateValKeys = set(stateVal.data_vars.keys()).union(set(stateVal.attrs)).union(set(stateVal.coords))
 		if not self.requiredStateKeys or set(self.requiredStateKeys).issubset(stateValKeys):
@@ -133,6 +136,11 @@ class PDE(object):
 	def reset_state(self):
 		# reset the state of the field to the state it was in when the instance was first initilized
 		self.state = self._initialState
+
+	def save(self, saveFile):
+		if saveFile[-3:] != '.nc':
+			saveFile += '.nc'
+		self.state.to_netcdf(saveFile, engine='h5netcdf')
 
 	def time_evolve(self, timeStepFunc, tFin, progressBar=True, callbackFunc=None, **timeStepArgs):
 		# tFin should be a real number or a function which returns a real number
