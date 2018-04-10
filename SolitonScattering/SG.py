@@ -245,6 +245,9 @@ class SineGordon(PDE):
 		if hasattr(mu, '__iter__'):
 			# make mu a DataArray
 			mu = xr.DataArray(np.array(mu), coords={'mu':np.array(mu)}, dims=('mu'))
+			identityMu = xr.DataArray(np.ones_like(mu), coords={'mu':np.array(mu)}, dims=('mu'))
+		else:
+			identityMu = 1
 
 		w = ut + ux
 
@@ -256,14 +259,10 @@ class SineGordon(PDE):
 
 		# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
-		v11 = - 0.25j*w
+		v11 = - 0.25j*w * identityMu
 		v12 = mu - exp(-1j*u)/(16*mu)
 		v21 = exp(1j*u)/(16*mu) - mu
 		v22 = - v11
-
-		# extend v11 and v22 in the mu dimension
-		v11 = v11 * mu/mu
-		v22 = v22 * mu/mu
 
 		V = xr.concat([xr.concat([v11, v12], dim='Vj'), xr.concat([v21, v22], dim='Vj')], dim='Vi')
 
