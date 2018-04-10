@@ -61,6 +61,7 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	dx = float(x[1] - x[0])
 
 	# save the value of the left and right boundaries for later use
+	# XXX: any way to avoid this copying?
 	uRightOld = u[{'x':-1}].copy(deep=True)
 	uLeftOld  = u[{'x':0}].copy(deep=True)
 
