@@ -199,7 +199,7 @@ class SineGordon(PDE):
 		# self.named_timeStepFuncs = {'eulerRobin': euler_robin,
 		# 						   'eulerMagnetic': euler_magnetic,
 		# 						   'eulerIntegrable': euler_integrable}
-		self.named_solutions = {'kink' : kink}
+		self.named_solutions = {'kink':kink, 'breather':breather}
 
 		super(SineGordon, self).__init__(timeStepFunc, **state)
 
