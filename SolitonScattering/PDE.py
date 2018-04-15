@@ -147,6 +147,10 @@ class PDE(object):
 		# if a function then the inputs of that function should be found in the
 		# coordinates or attributes of self.state
 
+		# force lims_index to be recalculated
+		if hasattr(self, '_indexLims'):
+			del self._indexLims
+
 		if type(timeStepFunc) == str:
 			# if a name of a time step function is given then return that
 			timeStepFunc = self.named_timeStepFuncs[timeStepFunc]
@@ -247,7 +251,7 @@ class PDE(object):
 		ax = plt.gca()
 
 		if showLims is not False:
-			iLims = self.indexLims[selection]
+			iLims = self.lims_index(selection)
 			xL, xR = x[iLims[0]], x[iLims[1]]
 			ax.set_ylim()
 
@@ -344,7 +348,7 @@ class PDE(object):
 	def eigenfunction_right(self, muList, ODEIntMethod='CRungeKuttaArray', selection={}):
 		import matplotlib.pyplot as plt
 		x, u = self.state['x'], self.state['u'][selection]
-		indexLims = self.indexLims[selection]
+		indexLims = self.lims_index(selection)
 
 		# muList should be a list
 		if not hasattr(muList, '__iter__'):

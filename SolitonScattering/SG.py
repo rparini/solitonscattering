@@ -398,8 +398,11 @@ class SineGordon(PDE):
 
 		return ScatteringData(spectralData)
 
-	@property
-	def indexLims(self):
+	def lims_index(self, selection={}):
+		if hasattr(self, '_indexLims') and self._indexLims[1] == selection:
+			# use cached value of _indexLims for this time and selection
+			return self._indexLims[0]
+
 		# get the values of the x index to the left and right of any soliton content
 		# at which the field and its derivatives are suitably small
 		x, u, ut, ux = self.state['x'], self.state['u'], self.state['ut'], self.ux
