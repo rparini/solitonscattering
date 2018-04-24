@@ -438,6 +438,11 @@ class PDE(object):
 
 			xLIndex, xRIndex = map(int, self.lims_index(full_selection))
 
+			# shift x axis so that 0 is at the center of the [xL, xR] interval
+			centerIndex = int((xRIndex + xLIndex)/2)
+			centerX = self.state['x'][centerIndex]
+			self.state['x'] -= centerX
+
 			# solve for yL as an initial value problem from xL to xR 
 			yR = self.eigenfunction_right(mu, ODEIntMethod, full_selection)
 
