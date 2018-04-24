@@ -1,14 +1,17 @@
 from __future__ import division
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.integrate import simps
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log, arctan2, sinh, tanh
-from warnings import warn
+import warnings
 import xarray as xr
 import math
 import inspect
+import os.path
 
 import cxroots
-from .PDE import PDE, stateFunc, timeStepFunc
+from .PDE import PDE, stateFunc, timeStepFunc, getval
+from .SGRobin import metastable_u0s, metastable_energy, closest_metastable
 
 #### Some useful equations
 gamma = lambda v: 1/sqrt(1 - v**2)
@@ -54,7 +57,6 @@ def breather(x, t, v, w, x0, xi = -pi/2):
 # 	ut = - 2 * gamma(v0) * v0 / cosh(gamma(v0) * (x - x0))
 # 	return {'t':0, 'x':x, 'u':u, 'ut':ut}
 
-
 #### Time Stepping Methods ####
 @timeStepFunc
 def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
@@ -84,7 +86,7 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	ut[{'x':0}]  = (u[{'x':0}]  - uLeftOld ) / dt
 
 	if dynamicRange:
-		checkRange = 10
+		checkRange = 100
 		# check if there is anything within checkRange spatial points of the left boundary
 		if np.any(abs(u[{'x':slice(0,checkRange)}]-dirichletValue) > 1e-4):
 			# add another checkRange points on to the end
@@ -189,7 +191,10 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 
 
 class SineGordon(PDE):
-	def __init__(self, timeStepFunc = 'eulerRobin',  **state):
+	# how to store types on disk (for sine-Gordon topological charge is used)
+	type_encoding = {'Kink':1, 'Antikink':-1, 'Breather':0, 'Unknown':9}
+
+	def __init__(self, state):
 		"""x, u, ut should be 1D numpy arrays which define the initial conditions
 		timeStep should either be an explicit time step function which takes (t, x, u, ut, dt, *args) 
 			and returns the state of the field at time t+dt or a string which is the key in named_timeStepFunc
@@ -201,7 +206,7 @@ class SineGordon(PDE):
 		# 						   'eulerIntegrable': euler_integrable}
 		self.named_solutions = {'kink':kink, 'breather':breather}
 
-		super(SineGordon, self).__init__(timeStepFunc, **state)
+		super(SineGordon, self).__init__(state)
 
 	def setticks(self):
 		# mark yticks in multiples of pi
@@ -221,9 +226,13 @@ class SineGordon(PDE):
 
 		plt.yticks(yticks, list(map(nameticks, yticks)))
 
-
 	@property
 	def ux(self):
+		if hasattr(self, '_ux'):
+			saved_t, ux = self._ux
+			if saved_t == getval(self.state, 't'):
+				return ux
+
 		# get the x derivative of u with a 2nd order central difference formula
 		# with 1st order differences at the boundaries
 		x = self.state['x'].data
@@ -234,7 +243,10 @@ class SineGordon(PDE):
 		ux = np.gradient(u, dx, edge_order=1, axis=xAxis)
 
 		# put ux in an xarray
-		return xr.DataArray(ux, u.coords, u.dims)
+		ux = xr.DataArray(ux, u.coords, u.dims)
+
+		self._ux = getval(self.state, 't'), ux
+		return ux
 
 	def xLax(self, mu, selection={}):
 		from xarray.ufuncs import exp
@@ -265,7 +277,6 @@ class SineGordon(PDE):
 		v22 = - v11
 
 		V = xr.concat([xr.concat([v11, v12], dim='Vj'), xr.concat([v21, v22], dim='Vj')], dim='Vi')
-
 		return V
 
 	def left_asyptotic_eigenfunction(self, mu, x):
@@ -298,16 +309,23 @@ class SineGordon(PDE):
 
 		return xr.concat([E, 1j*E], dim='Phii')
 
-	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, verbose=1):
+	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, verbose=1, saveFile=None):
+		# if saveFile is given then the eigenvalues will be saved to disk as they are computed
+
+
 		# find the bound state eigenvalues of the 'x' part of the Lax pair
 		u = self.state['u'][selection]
 
-		# set custom defaults
+		# Set custom defaults.  These can be overridden using rootFindingKwargs
 		rootFindingKwargs.setdefault('guessRootSymmetry', lambda z: [-z.conjugate()])	# roots occour either on the imaginary axis or in pairs with opposite real parts
-		# rootFindingKwargs.setdefault('absTol', 1e-3)
-		# rootFindingKwargs.setdefault('relTol', 1e-3)
-		rootFindingKwargs.setdefault('M', 1)
-		rootFindingKwargs.setdefault('divMax', 10)
+		rootFindingKwargs.setdefault('absTol', 1e-2)
+		rootFindingKwargs.setdefault('relTol', 1e-2)
+		rootFindingKwargs.setdefault('M', 3)
+		rootFindingKwargs.setdefault('divMin', 4)
+		rootFindingKwargs.setdefault('divMax', 15)
+		rootFindingKwargs.setdefault('m', 2) 	# 2*m+1 stencil size for numerical differentiation during contour integration
+		rootFindingKwargs.setdefault('NintAbsTol', .02)
+		rootFindingKwargs.setdefault('integerTol', .1)
 		rootFindingKwargs.setdefault('intMethod', 'romb')
 
 		if verbose == 2:
@@ -329,17 +347,45 @@ class SineGordon(PDE):
 		rootsAttrs = {'vRange':vRange,
 					  'ODEIntMethod':ODEIntMethod}
 		rootsAttrs.update(rootFindingKwargs)
-		del rootsAttrs['verbose']	# no need to record verbose
+		del rootsAttrs['verbose']			# no need to record verbose
+		del rootsAttrs['guessRootSymmetry']	# unable to save functions to disk
+		del rootsAttrs['df']				# df (the derivative of the Wronskian) is not available
 
-		# arrays to store eigenvalues and types of eigenvalues
-		eigenvalue_array = np.zeros(rootsShape, dtype=object)
-		type_array = np.zeros(rootsShape, dtype=object)
+		# Unable to store bools so convert to 1 or 0
+		rootsAttrs['attemptIterBest'] = int(rootsAttrs['attemptIterBest'])
+
+		if verbose == 2:
+			print('rootFindingKwargs:', rootFindingKwargs)
+
+		# create arrays to store eigenvalues and types of eigenvalues
+		eigenvalue_array = np.full(rootsShape, np.nan, dtype=object)
+		type_array = np.full(rootsShape, np.nan, dtype=object)
+
+		# we will store the topolgical charge rather than the string returned by 'typeEigenvalues'
+		type_dtype = np.dtype('i4')   # 32-bit signed integer
+
+		arrayDims = rootsDims + ['eigenvalue_index']
+		arrayShape = rootsShape + [1]
+		if saveFile and not os.path.isfile(saveFile):
+			# initialise spectral DataSet if it doesn't already exist on disk
+			xr_eigenvalue_array = np.full(arrayShape, np.nan, dtype=np.complex128)
+			xr_type_array = np.full(arrayShape, np.nan, dtype=type_dtype)
+			spectralData = xr.Dataset({'eigenvalues':(arrayDims, xr_eigenvalue_array),
+								   	   'types':(arrayDims, xr_type_array)},
+								   	   coords=rootsCoords, attrs=rootsAttrs)
+
+			if saveFile[-3:] != '.nc':
+				saveFile += '.nc'
+			# need to use engine='h5netcdf' to save complex files
+			spectralData.to_netcdf(saveFile, engine='h5netcdf')	
 
 		# create progressbar
 		makeProgressbar = verbose and rootsShape
 		if makeProgressbar:
 			from tqdm import trange
 			progressBar = trange(np.prod(rootsShape))
+
+		skipped = []
 
 		# compute the roots
 		maxNumberOfEigenvalues = 0
@@ -351,50 +397,111 @@ class SineGordon(PDE):
 				coordDict = dict([(key, float(rootsCoords[key][index[i]])) for i, key in enumerate(rootsCoords)])
 				progressBar.set_description(desc='Computing eigenvalues for '+str(coordDict))
 
-			wronskian_selection = selection.copy()
-			wronskian_selection.update(indexDict)
+			# check to see if roots were already computed
+			alreadyComputed = False
+			if saveFile:
+				with xr.open_dataset(saveFile, engine='h5netcdf') as spectralData:
+					eigenvalueData = spectralData['eigenvalues']
+					if not xr.ufuncs.isnan(eigenvalueData[indexDict][{'eigenvalue_index':0}]):
+						alreadyComputed = True
+						maxNumberOfEigenvalues = eigenvalueData.sizes['eigenvalue_index']
 
-			W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
+			if not alreadyComputed:
+				wronskian_selection = selection.copy()
+				wronskian_selection.update(indexDict)
 
-			C = boundStateRegion(vRange)
-			rootResult = C.roots(W, **rootFindingKwargs)
-			r, m = rootResult.roots, rootResult.multiplicities
-			if r and np.any(np.array(m) != 1):
-				print(rootResult)
-				raise RuntimeError('Multiplicities are not all 1')
+				W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
+				C = boundStateRegion(vRange)
 
-			eigenvalue_array[index] = r
-			type_array[index] = typeEigenvalues(r, u[indexDict])
+				try:
+					rootResult = C.roots(W, **rootFindingKwargs)
+				except RuntimeError as e:
+					print('Skipping ', indexDict)
+					print(e)
+					skipped.append(indexDict)
+					if makeProgressbar:
+						progressBar.update()
+					continue
 
-			# update maxNumberOfEigenvalues
-			if len(r) > maxNumberOfEigenvalues:
-				maxNumberOfEigenvalues = len(r)
+				r, m = rootResult.roots, rootResult.multiplicities
+				if r and np.any(np.array(m) != 1):
+					print(rootResult)
+					print('Skipping ', indexDict, '.  Multiplicities are not all 1!')
+					skipped.append(indexDict)
+					if makeProgressbar:
+						progressBar.update()
+					continue
 
-			# update maxTypeStringSize
-			for rootType in type_array[index]:
-				if len(rootType) > maxTypeStringSize:
-					maxTypeStringSize = len(rootType)
+				# store computed eigenvalues and types
+				t = np.array([self.type_encoding[ty] for ty in typeEigenvalues(r, u[indexDict])], dtype=type_dtype)
+				eigenvalue_array[index] = r
+				type_array[index] = t
+
+				# update maxNumberOfEigenvalues
+				if len(r) > maxNumberOfEigenvalues:
+					maxNumberOfEigenvalues = len(r)
+
+				# store computed eigenvalues and types on disk
+				if saveFile:
+					# XXX: is there a way to write incrementally without loading and overwriting the whole array?
+					spectralData = xr.open_dataset(saveFile, engine='h5netcdf')
+					spectralData.load()		# load whole file into memory (by default it is only lazily read)
+					spectralData.close()
+
+					if len(spectralData['eigenvalues'][indexDict]) < len(r):
+						# need to extend the array
+						padShape = rootsShape + [len(r) - len(spectralData['eigenvalues'][indexDict])]
+						padded_eigenvalue_array = np.full(padShape, np.nan, dtype=np.complex128)
+						padded_type_array = np.full(padShape, np.nan, dtype=type_dtype)
+						padArray = xr.Dataset({'eigenvalues':(arrayDims, padded_eigenvalue_array),
+											   'types':(arrayDims, padded_type_array)},
+											   coords=rootsCoords, attrs=rootsAttrs)
+
+						spectralData = xr.concat([spectralData, padArray], dim='eigenvalue_index')
+
+					padded_eigenvalues = np.full(len(spectralData['eigenvalues'][indexDict]), np.nan, dtype=np.complex128)
+					padded_types	   = np.full(len(spectralData['eigenvalues'][indexDict]), np.nan, dtype=type_dtype)
+
+					padded_eigenvalues[:len(r)] = r[:]
+					padded_types[:len(r)] 	    = t[:]
+
+					spectralData['eigenvalues'][indexDict] = padded_eigenvalues[:]
+					spectralData['types'][indexDict] = padded_types[:]
+
+					with warnings.catch_warnings():
+						# FutureWarning: complex dtypes are supported by h5py, but not part of the NetCDF API. 
+						# You are writing an HDF5 file that is not a valid NetCDF file! In the future, this will 
+						# be an error, unless you set invalid_netcdf=True.
+						warnings.simplefilter(action='ignore', category=FutureWarning)
+						spectralData.to_netcdf(saveFile, engine='h5netcdf')
 
 			if makeProgressbar:
 				progressBar.update()
 
+		if makeProgressbar:
+			progressBar.close()
+
+		if skipped:
+			print('Skipped ', skipped)
+
 		# pad out eigenvalue array so that it can be stored as a single complex-valued array
 		arrayShape = rootsShape + [maxNumberOfEigenvalues]
-		arrayDims = rootsDims + ['eigenvalue_index']
-
-		padded_eigenvalue_array = np.zeros(arrayShape, dtype=np.complex128)
-		padded_type_array = np.zeros(arrayShape, dtype=np.dtype(('U', maxTypeStringSize)))
+		padded_eigenvalue_array = np.full(arrayShape, np.nan, dtype=np.complex128)
+		padded_type_array = np.full(arrayShape, np.nan, dtype=type_dtype)
 		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
-			pad = np.empty(maxNumberOfEigenvalues - len(eigenvalue_array[index]))
-			pad.fill(np.nan)
-
-			padded_eigenvalue_array[index] = np.append(eigenvalue_array[index], pad)
-			padded_type_array[index] = np.append(type_array[index], pad)
+			if not np.all(np.isnan(eigenvalue_array[index])):
+				pad = np.full(maxNumberOfEigenvalues - len(eigenvalue_array[index]), np.nan)
+				padded_eigenvalue_array[index] = np.append(eigenvalue_array[index], pad)
+				padded_type_array[index] = np.append(type_array[index], pad)
 
 		# put eigenvalue and type arrays into an xarray Dataset
 		spectralData = xr.Dataset({'eigenvalues':(arrayDims, padded_eigenvalue_array),
 								   'types':(arrayDims, padded_type_array)},
 								   coords=rootsCoords, attrs=rootsAttrs)
+
+		if saveFile:
+			with xr.open_dataset(saveFile, engine='h5netcdf') as oldSpectralData:
+				spectralData = spectralData.combine_first(oldSpectralData)
 
 		return ScatteringData(spectralData)
 
@@ -529,10 +636,6 @@ def typeEigenvalues(eigenvalues, u):
 	# 	# the only distingusing factor between the eigenvalues is the speed
 	# 	# so we'll estimate the speed the old fashioned way by running the time evolution a little more
 
-	# 	if not hasattr(self, 'ut') or not hasattr(self, 'u'):
-	# 		# if we haven't saved the field then just run the time evolution until we have it
-	# 		self.get_rebounded(self.t)
-
 	# 	def get_typedPositions(u, x):
 	# 		# get the positions of kinks and antikinks
 
@@ -655,8 +758,12 @@ def print_eigenvalues(roots, types):
 	energy = np.array([breatherEnergy(velocity[i], frequency[i]) if types[i]=='Breather' else solitonEnergy(velocity[i]) for i in range(len(roots))])
 
 	# sort eigenvalues by energy in decending order
-	sortargs = np.argsort(energy)[::-1]
-	roots, types, velocity, frequency, energy = roots[sortargs], types[sortargs], velocity[sortargs], frequency[sortargs], energy[sortargs]
+	sortargs = np.array(np.argsort(energy)[::-1])
+	roots 		= roots[sortargs]
+	types 		= types[sortargs]
+	velocity 	= velocity[sortargs]
+	frequency 	= frequency[sortargs]
+	energy 		= energy[sortargs]
 
 	s =  '     Type     |           Eigenvalues           |  Velocity  | Frequency |  Energy  '
 	s+='\n------------------------------------------------------------------------------------'
@@ -685,37 +792,58 @@ def print_eigenvalues(roots, types):
 
 
 class ScatteringData(object):
-	def __init__(self, xarray):
-		self.xarray = xarray
+	def __init__(self, data):
+		if type(data) == str:
+			data = xr.open_dataset(data, engine='h5netcdf')
+			data.load()
+			data.close()
+
+		self.data = data
+
+		self.colorDict = {'Kink':'C0', 'Antikink':'C3', 'Breather':'C2', 'Unknown':'C7'}
+		self.type_decoding = {v: k for k, v in SineGordon.type_encoding.items()}
+
+	def decode_types(self, encodedTypes):
+		return np.array([self.type_decoding[e] if e in self.type_decoding.keys() else e for e in encodedTypes])
 
 	def __str__(self):
-		if len(self.xarray['eigenvalues'].dims) == 1:
-			return print_eigenvalues(self.xarray['eigenvalues'].values, self.xarray['types'].data)
+		eigenvalues = self.data['eigenvalues']
+		types = self.data['types']
+
+		if len(self.data['eigenvalues'].dims) == 1:
+			return print_eigenvalues(eigenvalues.values, self.decode_types(types.data))
 
 		else:
 			s = ''
-			for index, dummy in np.ndenumerate(np.empty(self.xarray['eigenvalues'].shape[:-1])):
-				indexDict = dict([(key, index[i]) for i, key in enumerate(self.xarray.coords)])
-				coordDict = dict([(key, float(self.xarray.coords[key][index[i]])) for i, key in enumerate(self.xarray.coords)])
+			for index, dummy in np.ndenumerate(np.empty(eigenvalues.shape[:-1])):
+				indexDict = dict([(key, index[i]) for i, key in enumerate(self.data.coords)])
+				coordDict = dict([(key, float(self.data.coords[key][index[i]])) for i, key in enumerate(self.data.coords)])
 				s += '\n' + str(coordDict) + '\n'
-				s += print_eigenvalues(self.xarray['eigenvalues'][index].data, self.xarray['types'][index].data) + '\n'
+				s += print_eigenvalues(eigenvalues[index].data, self.decode_types(types[index].data)) + '\n'
 			return s
 
-	def show(self, saveFile=None):
+	def save(self, saveFile):
+		if saveFile[-3:] != '.nc':
+			saveFile += '.nc'
+		self.data.to_netcdf(saveFile, engine='h5netcdf')
+
+	def show(self, *args, **kwargs):
+		arrayShape = self.data['eigenvalues'][{'eigenvalue_index':0}].shape
+		if len(arrayShape) == 0:
+			self.show_eigenvalues(*args, **kwargs)
+		elif len(arrayShape) == 1:
+			self.show_2Dkinematics(*args, **kwargs)
+
+	def show_eigenvalues(self, saveFile=None):
 		import matplotlib.pyplot as plt
-		types = self.xarray['types'].data
+		types = self.decode_types(self.data['types'].data)
 
-		C = boundStateRegion(self.xarray.attrs['vRange'])
-
-		colorDict = {'Kink':'C0', 
-					 'Antikink':'C3', 
-					 'Breather':'C2', 
-					 'Unknown':'C7'}
+		C = boundStateRegion(self.data.attrs['vRange'])
 
 		path = C(np.linspace(0,1,1e3))
 		plt.plot(path.real, path.imag, linestyle='--', color='k')
-		for i, e in enumerate(self.xarray['eigenvalues'].values):
-			plt.scatter(e.real, e.imag, color=colorDict[types[i]])
+		for i, e in enumerate(self.data['eigenvalues'].values):
+			plt.scatter(e.real, e.imag, color=self.colorDict[types[i]])
 
 		ax = plt.gca()
 		ax.set_aspect(1)
