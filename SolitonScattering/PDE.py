@@ -366,10 +366,17 @@ class PDE(object):
 
 		yR = xr.DataArray(np.zeros(yRShape, dtype=np.complex128), coords=yRCoords, dims=yRDims)
 
-		VFull = self.xLax(muList, selection=selection)
+		### XXX: Calling xLax all at once is much faster than calling individually for each mu but eats memory.
+		### Perhaps judge how much memory is going to be used and choose the appropriate method?
+		# VFull = self.xLax(muList, selection=selection).transpose('mu','x','Vi','Vj')
 
 		for index, dummy in np.ndenumerate(np.empty(axisShape)):
 			indexDict = dict([(key, index[i]) for i, key in enumerate(self.state.coords) if key!='x' and len(u[key].shape)>0])
+
+			fullSelection = {}
+			fullSelection.update(selection)
+			fullSelection.update(indexDict)
+
 			xLIndex, xRIndex = map(int, indexLims[indexDict])
 			x = self.state['x'][xLIndex:xRIndex+1]
 			h = float(x[1] - x[0])
@@ -382,7 +389,8 @@ class PDE(object):
 			for muindex, mu in enumerate(muList):
 				# reorder V and cast as a numpy array 
 				V = np.zeros((len(x),2,2), dtype=np.complex128)
-				V[:] = VFull[indexDict][{'x':slice(xLIndex, xRIndex+1)}][{'mu':muindex}].transpose('x','Vi','Vj').values
+				V[:] = self.xLax(mu, selection=fullSelection)[{'x':slice(xLIndex, xRIndex+1)}].transpose('x','Vi','Vj').data
+				# V[:] = VFull[indexDict][{'x':slice(xLIndex, xRIndex+1), 'mu':muindex}].data
 
 				yBoundL_mu = np.zeros(2, dtype=np.complex128)
 				yBoundL_mu[:] = yBoundL[{'mu':muindex}].values
@@ -401,8 +409,7 @@ class PDE(object):
 	def eigenfunction_wronskian(self, mu, ODEIntMethod='CRungeKuttaArray', selection={}):
 		# solve for the eigenfunction across x as an intial value problem
 		# at x[0] the eigenfunction is yBoundL = self.left_asyptotic_eigenfunction(mu)
-		# solve for the value of the eigenfunction at x[-1], yR
-		yR = self.eigenfunction_right(mu, ODEIntMethod, selection)
+		# solve for the value of the eigenfunction at x[-1]
 
 		# mu is assumed to be a list
 		if not hasattr(mu, '__iter__'):
@@ -417,7 +424,7 @@ class PDE(object):
 		WShape = list(len(u[key]) for key in u.coords if key != 'x' and len(u[key].shape)>0)
 		WShape.append(len(mu))
 
-		W = np.zeros(WShape, dtype=np.complex128)
+		W = np.empty(WShape, dtype=np.complex128)
 		W = xr.DataArray(W, WCoords, WDims)
 
 		# iterate over all axis except mu
@@ -425,7 +432,15 @@ class PDE(object):
 		for index, dummy in np.ndenumerate(np.empty(axisShape)):
 			indexDict = dict([(key, index[i]) for i, key in enumerate(self.state.coords) if key!='x' and len(u[key].shape)>0])
 			
-			xLIndex, xRIndex = map(int, self.indexLims[selection][indexDict])
+			full_selection = {}
+			full_selection.update(selection)
+			full_selection.update(indexDict)
+
+			xLIndex, xRIndex = map(int, self.lims_index(full_selection))
+
+			# solve for yL as an initial value problem from xL to xR 
+			yR = self.eigenfunction_right(mu, ODEIntMethod, full_selection)
+
 			x = self.state['x'][xLIndex: xRIndex+1]
 			h = float(x[1] - x[0])
 			xL, xR = x[0], x[-1]
@@ -438,29 +453,24 @@ class PDE(object):
 
 			# calculate the wronskian of the eigenfunction we solve for and the bound sate eigenfunction
 			yBoundR = self.right_asyptotic_eigenfunction(mu, xR)
-			W[indexDict] = yR[indexDict][{'yRi':0}]*yBoundR[{'Phii':1}] - yR[indexDict][{'yRi':1}]*yBoundR[{'Phii':0}]
+			W[indexDict] = yR[{'yRi':0}]*yBoundR[{'Phii':1}] - yR[{'yRi':1}]*yBoundR[{'Phii':0}]
+
+			# put self.state['x'] back to its original value
+			self.state['x'] += centerX
 
 		return W
 
-	def show_eigenfunction(self, mu):
+	def show_eigenfunction(self, mu, selection={}):
+		xLIndex, xRIndex = map(int, self.lims_index(selection))
+		u = self.state['u'][selection]
+
+		y = self.full_eigenfunction_right(mu, selection)
+		x = y.coords['x']
+
 		import matplotlib.pyplot as plt
-		x, u = self.state['x'], self.state['u']
-
-		xLIndex = 0
-		xRIndex = len(x)-1
-
-		x = x[xLIndex:xRIndex+1]
-		h = x[1] - x[0]
-		xL, xR = x[0], x[-1]
-		yBoundL = self.left_asyptotic_eigenfunction(mu, xL)
-
-
-		V = self.xLax(mu)[xLIndex:xRIndex+1]
-		y = ODE.RungeKuttaArray(2*h, yBoundL, V)
-
-		plt.plot(x[::2], y[:,0])
-		plt.plot(x[::2], y[:,1])
-		plt.plot(x, u[xLIndex:xRIndex+1], color='k', linestyle='--')
+		plt.plot(x, y[{'yRi':0}])
+		plt.plot(x, y[{'yRi':1}])
+		plt.plot(self.state['x'], u, color='k', linestyle='--')
 		plt.ylim(-10,10)
 		plt.show()
 
