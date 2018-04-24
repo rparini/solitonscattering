@@ -406,15 +406,23 @@ class SineGordon(PDE):
 		# get the values of the x index to the left and right of any soliton content
 		# at which the field and its derivatives are suitably small
 		x, u, ut, ux = self.state['x'], self.state['u'], self.state['ut'], self.ux
+		dx = float(x[1]-x[0])
 
-		# create array to put the index lims into
+		# Create array to put the index lims into		
 		indexLimsNames = [name for name in u[{'x':0}].coords if name!='x']
+		indexLimsCoords = [u[{'x':0}].coords[name].data for name in indexLimsNames]
+
 		indexLimsNames.append('side')
-		indexLimsCoords = [u[{'x':0}].coords[name].data for name in u[{'x':0}].coords if name!='x']
-		indexLimsCoords.append(['L','R'])
+		indexLimsCoords.append(np.array(['L','R']))
+
 		indexLimsShape = tuple(map(len, indexLimsCoords))
+
 		indexLims = np.zeros(indexLimsShape, dtype=int)
-		indexLims = xr.DataArray(indexLims, indexLimsCoords, indexLimsNames)
+		indexLims = xr.DataArray(indexLims, coords=indexLimsCoords, dims=indexLimsNames)
+		
+		# Restrict to selection
+		u, ut, ux = u[selection], ut[selection], ux[selection]
+		indexLims = indexLims[selection]
 
 		for index, dummy in np.ndenumerate(u[{'x':0}]):
 			indexDict = dict([(key, index[i]) for i, key in enumerate(u[{'x':0}].indexes) if key!='x'])
@@ -426,42 +434,48 @@ class SineGordon(PDE):
 			# XXX: make a more considered choice for the error function
 			errfunc = uerr+uterr+uxerr
 
-			# get the regions to the right and left of anything 'interesting'
-			uerrOk = np.where(errfunc<1e-1, np.ones_like(x), np.zeros_like(x))
-			uerrOkIndicies = np.where(errfunc<1e-1)[0]
+			### The allowed region where xR or xL might be placed should contain energy < 1
+			energyDensity = .5*ut[indexDict]**2 + .5*ux[indexDict]**2 + 1-cos(u[indexDict])
 
-			if uerrOk[0] == 1:
-				lRegionIndicies = (int(uerrOkIndicies[0]), int(np.where(np.diff(uerrOk)<0)[0][0]))
-			else:
-				lRegionIndicies = (int(np.where(np.diff(uerrOk)<0)[0][0]+1), int(np.where(np.diff(uerrOk)<0)[0][0]))
+			# Get allowed region to the left
+			energyToLeft = energyDensity.cumsum(dim='x', dtype=float)*dx
+			leftAllowedBoundaryIndex = np.where(energyToLeft < 1)[0][-1]
 
-			if uerrOk[-1] == 1:
-				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), uerrOkIndicies[-1])
-			elif np.any(np.diff(uerrOk)>0):
-				# if there is any right hand region
-				rRegionIndicies = (int(np.where(np.diff(uerrOk)>0)[0][-1]+1), int(np.where(np.diff(uerrOk)<0)[0][-1]+1))
-			else:
-				raise RuntimeError('No right hand region found.  Consider allowing time evolution to run for longer.')
+			# Get allowed region to the right
+			# XXX: This is Robin boundary specific!  Try to generalise.
+			uR = float(u[{'x':-1}][indexDict])
+			# if 'k' in self.state.attrs.keys():
+			# 	k = self.state.attrs['k']
+			# elif 'k' in self.state.coords.keys():
+			# 	k = self.state['k'][selection][indexDict]
+			k = getval(self.state[selection][indexDict], 'k')
+			n = closest_metastable(uR, k) 			# we are closest to the nth metastable boundary
+			metaEnergy = metastable_energy(n, k)	# the energy of the nth metastable boundary
+			energyToRight = k*uR**2 - metaEnergy + dx*(energyDensity.sum(dim='x', dtype=float) - energyDensity.cumsum(dim='x', dtype=float))
+			rightAllowedBoundaryIndex = np.where(energyToRight < 1)[0][0]
 
 			# within these regions find the minimum of the error function, biased
 			# slightly towards reducing the distance between xL and xR
-			lBndry = np.argmin(errfunc[lRegionIndicies[0]:lRegionIndicies[1]] - 1e-3*x[lRegionIndicies[0]:lRegionIndicies[1]])
-			rBndry = rRegionIndicies[0]+np.argmin(errfunc[rRegionIndicies[0]:rRegionIndicies[1]] + 1e-3*x[rRegionIndicies[0]:rRegionIndicies[1]])
+			xLIndex = np.argmin(errfunc[:leftAllowedBoundaryIndex] - 1e-5*x[:leftAllowedBoundaryIndex])
+			xRIndex = rightAllowedBoundaryIndex+np.argmin(errfunc[rightAllowedBoundaryIndex:] + 1e-5*x[rightAllowedBoundaryIndex:])
 
-			# import matplotlib.pyplot as plt
-			# ax = plt.gca()
-			# plt.plot(x,u[indexDict])
-			# plt.plot(x,uerrOk)
-			# ax.axvline(x[lRegionIndicies[0]], color='r')
-			# ax.axvline(x[lRegionIndicies[1]], color='r')
-			# ax.axvline(x[rRegionIndicies[0]], color='r')
-			# ax.axvline(x[rRegionIndicies[1]], color='r')
-			# plt.plot(x,errfunc)
-			# ax.axvline(x[lBndry], color='k')
-			# ax.axvline(x[rBndry], color='k')
-			# plt.show()
+			# sometimes (when there is a boundary breather) there is too much energy at the boundary
+			# so xR ends up being on the boundary even though the field is nowhere near the full line vacuum
+			# therefore enforce a minimum of -20 for xR
+			maxError = .1
+			if x[xRIndex] > -20 and errfunc[xRIndex] > 10*maxError:
+				warnings.warn('xR was at %.3f due to the energy at the boundary but will instead be set to -20.  Consider allowing time evolution to run for longer.'%x[xRIndex], RuntimeWarning)
+				xRIndex = np.argmin(abs(x+20))
 
-			indexLims[indexDict][:] = np.array([lBndry, rBndry], dtype=int)
+			if errfunc[xLIndex] > maxError:
+				warnings.warn('At xL uerr=%.3f, uterr=%.3f, uxerr=%.3f.  Consider allowing time evolution to run for longer.'%(uerr, uterr, uxerr), RuntimeWarning)
+			if errfunc[xRIndex] > maxError:
+				warnings.warn('At xR uerr=%.3f, uterr=%.3f, uxerr=%.3f.  Consider allowing time evolution to run for longer.'%(uerr, uterr, uxerr), RuntimeWarning)
+
+			indexLims[indexDict][:] = np.array([xLIndex, xRIndex], dtype=int)
+
+		# cache for later
+		self._indexLims = indexLims, selection
 		return indexLims
 
 	def plot_state(self, *args, **kwargs):
