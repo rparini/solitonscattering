@@ -346,7 +346,6 @@ class PDE(object):
 		raise NotImplementedError('Implement right_asyptotic_eigenfunction in a child class')		
 
 	def eigenfunction_right(self, muList, ODEIntMethod='CRungeKuttaArray', selection={}):
-		import matplotlib.pyplot as plt
 		x, u = self.state['x'], self.state['u'][selection]
 		indexLims = self.lims_index(selection)
 
