@@ -406,6 +406,27 @@ class PDE(object):
 
 		return yR
 
+	def full_eigenfunction_right(self, mu, selection={}):
+		if hasattr(mu, '__iter__'):
+			raise NotImplementedError('mu cannot yet be a list')
+
+		indexLims = self.lims_index(selection)
+		xLIndex, xRIndex = map(int, indexLims)
+		x = self.state['x'][xLIndex:xRIndex+1]
+		h = float(x[1] - x[0])
+		xL, xR = x[0], x[-1]
+
+		VFull = self.xLax(mu, selection=selection)
+		print('VFull', VFull)
+		V = np.zeros((len(x),2,2), dtype=np.complex128)
+		V[:] = VFull[selection][{'x':slice(xLIndex, xRIndex+1)}].transpose('x','Vi','Vj').values
+
+		yBoundL = self.left_asyptotic_eigenfunction(mu, xL)
+
+		x, y = ODE.RungeKuttaArray(2*h, yBoundL, V, returnT=True)
+		x = np.array(x) + float(xL) 	# ODE.RungeKuttaArray assumes that x starts at 0
+		return xr.DataArray(y, coords={'x':x}, dims=['x','yRi'])
+
 	def eigenfunction_wronskian(self, mu, ODEIntMethod='CRungeKuttaArray', selection={}):
 		# solve for the eigenfunction across x as an intial value problem
 		# at x[0] the eigenfunction is yBoundL = self.left_asyptotic_eigenfunction(mu)
