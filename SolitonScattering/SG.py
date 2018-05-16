@@ -329,7 +329,7 @@ class SineGordon(PDE):
 		rootFindingKwargs.setdefault('integerTol', .1)
 		rootFindingKwargs.setdefault('intMethod', 'romb')
 
-		if verbose == 2:
+		if verbose >= 2:
 			rootFindingKwargs['verbose'] = True
 		else:
 			rootFindingKwargs['verbose'] = False
@@ -355,7 +355,7 @@ class SineGordon(PDE):
 		# Unable to store bools so convert to 1 or 0
 		rootsAttrs['attemptIterBest'] = int(rootsAttrs['attemptIterBest'])
 
-		if verbose == 2:
+		if verbose >= 2:
 			print('rootFindingKwargs:', rootFindingKwargs)
 
 		# create arrays to store eigenvalues and types of eigenvalues
@@ -415,8 +415,18 @@ class SineGordon(PDE):
 				C = boundStateRegion(vRange)
 
 				try:
-					rootResult = C.roots(W, **rootFindingKwargs)
-				except RuntimeError as e:
+					if verbose >= 3:
+						rootFindingKwargs.update({'automaticAnim':True})
+						rootResult = C.demo_roots(W, **rootFindingKwargs)
+					else:
+						rootResult = C.roots(W, **rootFindingKwargs)
+					r, m = rootResult.roots, rootResult.multiplicities
+
+					if r and np.any(np.array(m) != 1):
+						print(rootResult)
+						raise RuntimeError('Multiplicities are not all 1!')
+				except Exception as e:
+					raise e
 					print('Skipping ', indexDict)
 					print(e)
 					skipped.append(indexDict)
@@ -424,19 +434,14 @@ class SineGordon(PDE):
 						progressBar.update()
 					continue
 
-				r, m = rootResult.roots, rootResult.multiplicities
-				if r and np.any(np.array(m) != 1):
-					print(rootResult)
-					print('Skipping ', indexDict, '.  Multiplicities are not all 1!')
-					skipped.append(indexDict)
-					if makeProgressbar:
-						progressBar.update()
-					continue
 
 				# store computed eigenvalues and types
 				t = np.array([self.type_encoding[ty] for ty in typeEigenvalues(r, u[indexDict])], dtype=type_dtype)
 				eigenvalue_array[index] = r
 				type_array[index] = t
+
+				if verbose >= 2:
+					print(print_eigenvalues(np.array(r), np.array(typedEigenvalues)))
 
 				# update maxNumberOfEigenvalues
 				if len(r) > maxNumberOfEigenvalues:
