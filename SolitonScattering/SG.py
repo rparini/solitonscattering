@@ -86,11 +86,12 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	ut[{'x':0}]  = (u[{'x':0}]  - uLeftOld ) / dt
 
 	if dynamicRange:
-		checkRange = 100
+		checkRange = 10
+		newPoints = 10**4
 		# check if there is anything within checkRange spatial points of the left boundary
 		if np.any(abs(u[{'x':slice(0,checkRange)}]-dirichletValue) > 1e-4):
-			# add another checkRange points on to the end
-			newPoints = np.linspace(float(x[0]-checkRange*dx), float(x[0]-dx), checkRange)
+			# add another newPoints points on to the end
+			newPoints = np.linspace(float(x[0]-newPoints*dx), float(x[0]-dx), newPoints)
 
 			# create new data points for the new region
 			newSize = dict([(key, u.sizes[key]) for key in u.sizes]) # copy dictionary
