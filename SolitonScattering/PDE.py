@@ -267,10 +267,10 @@ class PDE(object):
 				plt.text(xRAxis-.01, 1.01, '$x_R$', transform=ax.transAxes)
 				ax.axvline(xR, color='k', linestyle='--', linewidth=1)
 
+		self.setticks()
+
 		if ylim is not None:
 			plt.ylim(ylim[0], ylim[1])
-
-		self.setticks()
 
 		plt.ylabel('$u$', rotation=0)
 		plt.xlabel('$x$')
