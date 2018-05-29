@@ -592,19 +592,21 @@ class SineGordon(PDE):
 		self._indexLims = indexLims, selection
 		return indexLims
 
-	def typeEigenvalues(self, eigenvalues, u):
+	def typeEigenvalues(self, eigenvalues, selection={}):
 		types = np.zeros_like(eigenvalues, dtype=object)
 		if len(types) == 0:
 			return types
 		else:
 			types[:] = ''
 
-		# get the total field topological charge
-		Q = charge(u)
+		u = self.state['u'][selection]
 
 		# first filter out all the breathers
 		for i in np.where(abs(np.vectorize(solitonFrequency)(eigenvalues)) > 1e-5)[0]:
 			types[i] = 'Breather'
+
+		# get the total field topological charge
+		Q = charge(u)
 
 		if len(np.where(types=='')[0]) == 1:
 			# if there's only one kink/antikink left look at the field's total topological charge
@@ -612,6 +614,90 @@ class SineGordon(PDE):
 				types[np.where(types=='')[0]] = 'Kink'
 			elif Q == -1:
 				types[np.where(types=='')[0]] = 'Antikink'
+
+		elif Q == 0 and len(np.where(types=='')[0]) > 0 and getval(self.state, 'k') is not None:
+			# if there's two then it's probably a kink + antikink and we need to work out which is which
+			# the only distingusing factor between the eigenvalues is the speed
+			# so we'll estimate the speed the old fashioned way by running the time evolution a little more
+
+			roundNearest = lambda u: 2*pi * np.round(u/(2*pi))
+
+			def get_typedPositions(u, x):
+				# get the positions of kinks and antikinks
+
+				# find where kinks and antikinks have their midpoint
+				if u[np.abs(u).argmax()] > 0:
+					midpoint = roundNearest(u[0]) + pi
+				elif u[np.abs(u).argmax()] < 0:
+					midpoint = roundNearest(u[0]) - pi
+
+				# get the two points just above the kink/antikink midpoint
+				try:
+					pointsAboveMidpoint = (u[u > midpoint][0], u[u > midpoint][-1])
+				except IndexError:
+					# sometimes the kink and antikink are too close together
+					return None
+
+				# Interpolate to find the place where the field = midpoint
+				typedPositions = {}
+				for u1 in pointsAboveMidpoint:
+					index1 = np.abs(u - u1).argmin()
+					index0 = index1 - 1
+					x0, x1 = x[index0], x[index1]
+					u0 = u[index0]
+
+					ux = (u1 - u0) / (x1 - x0)
+					if ux > 0:
+						soltype = 'Kink'
+					else:
+						soltype = 'Antikink'
+
+					solpos = x0 + (x1 - x0) * (midpoint - u0) / (u1 - u0)
+					typedPositions[soltype] = float(solpos)
+
+				try:
+					typedPositions['Kink']
+					typedPositions['Antikink']
+				except KeyError:
+					return None
+
+				return typedPositions
+
+			# get the initial position of the kink and antikink
+			typedPos0 = get_typedPositions(u, self.state['x'])
+			if typedPos0 == None:
+				for i in np.where(types=='')[0]:
+					types[i] = 'Unknown'
+				return types
+
+			# run the time evolution a bit more to manually see the speed
+			if getval(self.state, 'k') is not None:
+				timeStepFunc = 'euler_robin' 	### XXX: Need a better way to decide that we are using the Robin boundary
+
+			t0 = getval(self.state, 't')
+
+			tempField = SineGordon(self.state[selection])
+
+			t = getval(tempField.state, 't')
+			while t < t0 + 5 or get_typedPositions(tempField.state['u'], tempField.state['x']) == None:
+				dt = self.state.attrs['dt']
+				t = getval(tempField.state, 't')
+				if timeStepFunc == 'euler_robin':
+					k = getval(self.state, 'k')
+					tempField.time_evolve(timeStepFunc, t+dt, progressBar=False, dt=dt, k=k, dirichletValue=2*pi, dynamicRange=True)
+			t1 = t
+
+			# get the position of the kink and antikink at t1
+			typedPos1 = get_typedPositions(tempField.state['u'], tempField.state['x'])
+
+			# work out the speed
+			kinkSpeed = (typedPos1['Kink'] - typedPos0['Kink']) / (t1 - t0)
+			antikinkSpeed = (typedPos1['Antikink'] - typedPos0['Antikink']) / (t1 - t0)
+
+			# now match the manual speed with the eigenvalue speed
+			eigenvalueSpeed = np.vectorize(solitonVelocity)(eigenvalues)
+			types[np.abs(eigenvalueSpeed - kinkSpeed).argmin()] = 'Kink'
+			types[np.abs(eigenvalueSpeed - antikinkSpeed).argmin()] = 'Antikink'
 
 		# else:
 		# 	# Extract charge from spectral data
@@ -621,12 +707,16 @@ class SineGordon(PDE):
 		# 	xRIndex, xLIndex = self.lims_index()
 		# 	centerIndex = int((xRIndex + xLIndex)/2)
 		# 	centerX = self.state['x'][centerIndex]
+		# 	xL = float(self.state['x'][xLIndex])
+
 		# 	self.state['x'] -= centerX
 
 		# 	xR = float(self.state['x'][xRIndex])
 
 		# 	W = self.eigenfunction_wronskian
-		# 	dW = cxroots.CxDeriv(W)
+		# 	# dW = cxroots.CxDeriv(W)
+		# 	dz = 1e-8
+		# 	dW = lambda z: (complex(W(z+dz))-complex(W(z)))/dz
 
 		# 	for i in np.where(abs(np.vectorize(solitonFrequency)(eigenvalues)) < 1e-5)[0]:
 		# 		mu = eigenvalues[i]
@@ -637,24 +727,26 @@ class SineGordon(PDE):
 		# 		f = yR.values.reshape((2,1))
 		# 		g = yR_asymp.values
 
-		# 		dW_mu = dW(mu)
-
 		# 		ratio = f/g
-		# 		m = ratio[0]/(1j*dW_mu/(2j))
+		# 		m = 2*ratio[0]/dW(mu)
+
+		# 		# print('--- Should be same ---')
+		# 		# print(2*ratio[0]/dW(mu))
+		# 		# print(2*ratio[1]/dW(mu))
+		# 		# print('----------------------')
+
 		# 		b = -1j*m[0]
 
 		# 		# [TK] says sign[b] instead of -sign[b]
 		# 		epsilon = -int(b.real/abs(b.real)) # =-sign[b]
 
-		# 		print('mu', mu, )
-		# 		print('W(mu)', complex(W(mu)))
-		# 		print('dW(mu)', complex(dW_mu))
-		# 		dz = 1e-8
-		# 		print('dW(mu)', (complex(W(mu+dz))-complex(W(mu)))/dz)
-		# 		print('ratio', f/g)
-		# 		print('m', m)
-		# 		print('b', b)
-		# 		print('epsilon', epsilon)
+		# 		# print('mu', mu, )
+		# 		# print('W(mu)', complex(W(mu)))
+		# 		# print('dW(mu)', complex(dW(mu)))
+		# 		# print('ratio', f/g)
+		# 		# print('m', m)
+		# 		# print('b', b)
+		# 		# print('epsilon', epsilon)
 
 		# 		if epsilon == 1:
 		# 			types[i] = 'Kink'
