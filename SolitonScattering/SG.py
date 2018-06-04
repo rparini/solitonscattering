@@ -65,7 +65,6 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	# save the value of the left and right boundaries for later use
 	# XXX: any way to avoid this copying?
 	uRightOld = u[{'x':-1}].copy(deep=True)
-	uLeftOld  = u[{'x':0}].copy(deep=True)
 
 	# u_tt = u_xx - sin(u)
 	# Get u_tt by using a second order central difference formula to calcuate u_xx
@@ -79,11 +78,11 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	u[{'x':-1}] = u[{'x':-2}]/(1 + 2*k*dx)
 
 	# Impose Dirichlet boundary condition at left:
-	u[{'x':0}] = dirichletValue
+	u[{'x':0}]  = dirichletValue
+	ut[{'x':0}] = 0
 
 	# Rolling messes ut up at the boundaries so fix here:
 	ut[{'x':-1}] = (u[{'x':-1}] - uRightOld) / dt
-	ut[{'x':0}]  = (u[{'x':0}]  - uLeftOld ) / dt
 
 	if dynamicRange:
 		checkRange = 10
