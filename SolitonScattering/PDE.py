@@ -237,12 +237,12 @@ class PDE(object):
 	def setticks(self):
 		pass
 
-	def plot(self, selection={}, showLims=False, useTex=False, ylim=None):
+	def plot(self, selection={}, showLims=False, useTex=False, ylim=None, fontSize=16):
 		from matplotlib import pyplot as plt
 		if useTex:
 			plt.rc('text', usetex=True)
 			# plt.rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
-			plt.rcParams.update({'font.size': 16})
+		plt.rcParams.update({'font.size': fontSize})
 
 		x, u = [self.state[k] for k in ['x','u']]
 
@@ -273,7 +273,7 @@ class PDE(object):
 			plt.ylim(ylim[0], ylim[1])
 
 		plt.ylabel('$u$', rotation=0)
-		plt.xlabel('$x$')
+		plt.xlabel('$x$', labelpad=-1)
 
 	def show(self, saveFile=None, **kwargs):
 		from matplotlib import pyplot as plt
@@ -289,23 +289,38 @@ class PDE(object):
 		saveAnimationDict = {'filename':saveFile, 'fps':fps, 'frames':frames, 'writer':writer, 'dpi':dpi, 'codec':codec}
 		self.show_animation(ylim=ylim, saveAnimationDict = saveAnimationDict, **timeStepArgs)
 
-	def show_animation(self, timeStepFunc, skipFrames = 0, ylim=None, saveAnimationDict = {}, **timeStepArgs):
+	def show_animation(self, timeStepFunc, skipFrames = 0, ylim=None, saveAnimationDict = {}, 
+			useTex=True, fontSize=16,
+			saveInitFile=False, **timeStepArgs):
 		from matplotlib import pyplot as plt
 		from matplotlib import animation
+
+		if useTex:
+			plt.rc('text', usetex=True)
+			# plt.rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+		plt.rcParams.update({'font.size': fontSize})
 
 		if type(timeStepFunc) == str:
 			# if a name of a time step function is given then return that
 			timeStepFunc = self.named_timeStepFuncs[timeStepFunc]
 
 		fig = plt.gcf()
+		fig.tight_layout()
 		ax = plt.gca()
+
 		plt.xlim(self.state['x'].values[0], self.state['x'].values[-1])
-		line, = ax.plot([], [])
+		line, = ax.plot(self.state['x'], self.state['u'])
 		if ylim is not None:
 			ax.set_ylim(ylim[0],ylim[-1])
 		self.setticks()
 
-		timeLabel = ax.text(0.05, 0.9, '', transform=ax.transAxes)
+		plt.ylabel('$u$', rotation=0)
+		plt.xlabel('$x$', labelpad=-1)
+
+		timeLabel = ax.text(0.05, 0.91, '$t=%.1f$' % self.state.attrs['t'], transform=ax.transAxes)
+
+		if saveInitFile:
+			plt.savefig(saveInitFile)
 
 		# initialization function sets the background of each frame
 		# it should hide anything that will change in the animation
@@ -321,7 +336,7 @@ class PDE(object):
 				self.state = timeStepFunc(self.state, **timeStepArgs)
 
 			line.set_data(self.state['x'], self.state['u'])
-			timeLabel.set_text('$t$ = %.1f' % self.state.attrs['t'])
+			timeLabel.set_text('$t = %.1f$' % self.state.attrs['t'])
 			return line, timeLabel
 
 		# call the animator
@@ -493,8 +508,10 @@ class PDE(object):
 		x = y.coords['x']
 
 		import matplotlib.pyplot as plt
-		plt.plot(x, y[{'yRi':0}])
-		plt.plot(x, y[{'yRi':1}])
+		plt.plot(x, np.real(y[{'yRi':0}]), color='C0')
+		plt.plot(x, np.imag(y[{'yRi':0}]), color='C0', linestyle='--')
+		plt.plot(x, np.real(y[{'yRi':1}]), color='C1')
+		plt.plot(x, np.imag(y[{'yRi':1}]), color='C1', linestyle='--')
 		plt.plot(self.state['x'], u, color='k', linestyle='--')
 		plt.ylim(-10,10)
 		plt.show()

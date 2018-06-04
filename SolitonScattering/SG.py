@@ -213,7 +213,8 @@ class SineGordon(PDE):
 		# mark yticks in multiples of pi
 		from matplotlib import pyplot as plt
 		ax = plt.gca()
-		yticks = np.arange(math.floor(ax.get_ylim()[0]/pi)*pi, math.ceil(ax.get_ylim()[1]/pi)*pi, pi)
+		ylim = ax.get_ylim()
+		yticks = np.arange(math.floor(ylim[0]/pi)*pi, math.ceil(ylim[1]/pi)*pi, pi)
 
 		def nameticks(tick):
 			multiple = int(round(tick/pi))
@@ -226,6 +227,7 @@ class SineGordon(PDE):
 			return '$'+str(multiple)+r'\pi$'
 
 		plt.yticks(yticks, list(map(nameticks, yticks)))
+		plt.ylim(ylim)
 
 	@property
 	def ux(self):
