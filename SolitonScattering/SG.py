@@ -945,7 +945,16 @@ class ScatteringData(object):
 		else:
 			plt.show()
 
-	def show_2Dkinematics(self, axis):
+	def show_2Dkinematics(self, saveFile=None, *args, **kwargs):
+		self.plot_2Dkinematics(*args, **kwargs)
+
+		if saveFile:
+			plt.savefig(saveFile)
+			plt.close()
+		else:
+			plt.show()
+
+	def plot_2Dkinematics(self, axis, saveFile=None):
 		import matplotlib.pyplot as plt
 		for t in ['Kink', 'Antikink', 'Breather']:
 			data = self.data.where(self.data['types'] == SineGordon.type_encoding[t])
@@ -964,11 +973,11 @@ class ScatteringData(object):
 				speed = speed[:, np.argsort(freq)[:,0]]
 			else:
 				speed = np.sort(speed)
-			plt.plot(data[axis], speed, self.colorDict[t], label=t)
+			plt.plot(data[axis], speed, self.colorDict[t], label=t+' Speed')
 
 		plt.ylim(0,1)
 		plt.xlim(data[axis][0], data[axis][-1])
 		plt.ylabel('Speed/Frequency')
 		plt.xlabel(axis)
-		plt.show()
+
 
