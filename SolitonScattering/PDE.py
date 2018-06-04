@@ -506,6 +506,13 @@ class PDE(object):
 		xLIndex, xRIndex = map(int, self.lims_index(selection))
 		u = self.state['u'][selection]
 
+		# shift x axis so that 0 is at the center of the [xL, xR] interval
+		centerIndex = int((xRIndex + xLIndex)/2)
+		centerX = self.state['x'][centerIndex]
+		xL = float(self.state['x'][xLIndex])
+		xR = float(self.state['x'][xRIndex])
+		self.state['x'] -= centerX
+
 		y = self.full_eigenfunction_right(mu, selection)
 		x = y.coords['x']
 
@@ -517,6 +524,9 @@ class PDE(object):
 		plt.plot(self.state['x'], u, color='k', linestyle='--')
 		plt.ylim(-10,10)
 		plt.show()
+
+		# put xRange back to original value
+		self.state['x'] += centerX
 
 
 	def show_wronskianMag(self, xlim=[-1,1], ylim=[-0.5,1], N=101):
