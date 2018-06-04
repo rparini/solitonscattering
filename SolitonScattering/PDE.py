@@ -30,8 +30,10 @@ def stateFunc(fieldFunc):
 	def dataset_wrap(*args, **kwargs):
 		# include defaults explicitly in the kwargs
 		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
+		tempkwargs = {}
 		defaults = inspect.getargspec(fieldFunc)[3]
-		tempkwargs = dict((key, defaults[i]) for i, key in enumerate(inspect.getargspec(fieldFunc)[0][-len(defaults):]))
+		if defaults is not None:
+			tempkwargs.update(dict((key, defaults[i]) for i, key in enumerate(inspect.getargspec(fieldFunc)[0][-len(defaults):])))
 		tempkwargs.update(kwargs)
 		kwargs = tempkwargs
 
