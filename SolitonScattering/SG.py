@@ -954,7 +954,7 @@ class ScatteringData(object):
 		else:
 			plt.show()
 
-	def plot_2Dkinematics(self, axis, saveFile=None):
+	def plot_2Dkinematics(self, axis, showLabels=True, saveFile=None):
 		import matplotlib.pyplot as plt
 		for t in ['Kink', 'Antikink', 'Breather']:
 			data = self.data.where(self.data['types'] == SineGordon.type_encoding[t])
@@ -963,7 +963,7 @@ class ScatteringData(object):
 			freq = abs(solitonFrequency(data['eigenvalues']))
 			freq = freq.where(freq < .999)
 			if t == 'Breather':
-				plt.plot(data[axis], np.sort(freq)[:,0], 'k', linestyle='--', label='Frequency')
+				plt.plot(data[axis], np.sort(freq)[:,0], 'k', linestyle='--', label='Breather Frequency')
 
 			# plot speed
 			speed = abs(solitonVelocity(data['eigenvalues']))
@@ -975,6 +975,12 @@ class ScatteringData(object):
 				speed = np.sort(speed)
 			plt.plot(data[axis], speed, self.colorDict[t], label=t+' Speed')
 
+		### remove duplicate labels
+		from collections import OrderedDict
+		handles, labels = plt.gca().get_legend_handles_labels()
+		by_label = OrderedDict(zip(labels, handles))
+
+		plt.legend(by_label.values(), by_label.keys())
 		plt.ylim(0,1)
 		plt.xlim(data[axis][0], data[axis][-1])
 		plt.ylabel('Speed/Frequency')
