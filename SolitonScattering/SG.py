@@ -561,7 +561,7 @@ class SineGordon(PDE):
 			uxerr = np.abs(ux[indexDict])
 
 			# XXX: make a more considered choice for the error function
-			errfunc = uerr+uterr+uxerr
+			errfunc = uerr + 4*(uterr+uxerr)
 
 			### The allowed region where xR or xL might be placed should contain energy < 1
 			energyDensity = .5*ut[indexDict]**2 + .5*ux[indexDict]**2 + 1-cos(u[indexDict])
