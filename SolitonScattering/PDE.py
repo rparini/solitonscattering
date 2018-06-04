@@ -417,7 +417,6 @@ class PDE(object):
 		xL, xR = x[0], x[-1]
 
 		VFull = self.xLax(mu, selection=selection)
-		print('VFull', VFull)
 		V = np.zeros((len(x),2,2), dtype=np.complex128)
 		V[:] = VFull[selection][{'x':slice(xLIndex, xRIndex+1)}].transpose('x','Vi','Vj').values
 
