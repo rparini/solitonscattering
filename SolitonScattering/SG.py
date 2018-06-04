@@ -321,11 +321,11 @@ class SineGordon(PDE):
 
 		# Set custom defaults.  These can be overridden using rootFindingKwargs
 		rootFindingKwargs.setdefault('guessRootSymmetry', lambda z: [-z.conjugate()])	# roots occour either on the imaginary axis or in pairs with opposite real parts
-		rootFindingKwargs.setdefault('absTol', 1e-2)
-		rootFindingKwargs.setdefault('relTol', 1e-2)
-		rootFindingKwargs.setdefault('M', 3)
-		rootFindingKwargs.setdefault('divMin', 4)
-		rootFindingKwargs.setdefault('divMax', 15)
+		rootFindingKwargs.setdefault('absTol', 1e-3)
+		rootFindingKwargs.setdefault('relTol', 1e-3)
+		rootFindingKwargs.setdefault('M', 2)
+		rootFindingKwargs.setdefault('divMin', 5)
+		rootFindingKwargs.setdefault('divMax', 20)
 		rootFindingKwargs.setdefault('m', 2) 	# 2*m+1 stencil size for numerical differentiation during contour integration
 		rootFindingKwargs.setdefault('NintAbsTol', .02)
 		rootFindingKwargs.setdefault('integerTol', .1)
