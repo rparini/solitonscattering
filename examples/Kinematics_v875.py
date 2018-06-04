@@ -1,6 +1,7 @@
 from matplotlib import pyplot as plt
 import xarray as xr
 import numpy as np
+from numpy import pi
 
 from SolitonScattering import SG
 
