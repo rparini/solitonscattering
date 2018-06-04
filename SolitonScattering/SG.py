@@ -903,7 +903,7 @@ class ScatteringData(object):
 			for index, dummy in np.ndenumerate(np.empty(eigenvalues.shape[:-1])):
 				indexDict = dict([(key, index[i]) for i, key in enumerate(self.data.coords)])
 				coordDict = dict([(key, float(self.data.coords[key][index[i]])) for i, key in enumerate(self.data.coords)])
-				s += '\n' + str(coordDict) + '\n'
+				s += '\nIndices: ' + str(indexDict) + '\nCoordinates: ' + str(coordDict) + '\n'
 				s += print_eigenvalues(eigenvalues[index].data, self.decode_types(types[index].data)) + '\n'
 			return s
 
