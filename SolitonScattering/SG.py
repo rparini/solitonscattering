@@ -300,8 +300,9 @@ class SineGordon(PDE):
 	def right_asyptotic_eigenfunction(self, mu, x):
 		# return the asymptotic value of the bound state eigenfunction as x -> +inf
 		from xarray.ufuncs import exp
-		if hasattr(mu, '__iter__'):
-			mu = xr.DataArray(mu, [('mu', mu)])
+		if not hasattr(mu, '__iter__'):
+			mu = [mu]
+		mu = xr.DataArray(mu, [('mu', mu)])
 
 		# With lambda=i*mu in Eq.9 of "Breaking integrability at the boundary"
 		# E = exp(-(mu+1/(16*mu))*x)
