@@ -571,8 +571,11 @@ class SineGordon(PDE):
 			leftAllowedBoundaryIndex = np.where(energyToLeft < 1)[0][-1]
 
 			# Get allowed region to the right
-			# XXX: This is Robin boundary specific!  Try to generalise.
-			uR = float(u[{'x':-1}][indexDict])
+			energyToRight = dx*(energyDensity.sum(dim='x', dtype=float) - energyDensity.cumsum(dim='x', dtype=float))
+
+			####### XXX: This is Robin boundary specific!  Try to generalise. #######
+			uR  = float(u[{'x':-1}][indexDict])
+			uxR = float(ux[{'x':-1}][indexDict])
 			# if 'k' in self.state.attrs.keys():
 			# 	k = self.state.attrs['k']
 			# elif 'k' in self.state.coords.keys():
@@ -580,26 +583,37 @@ class SineGordon(PDE):
 			k = getval(self.state[selection][indexDict], 'k')
 			n = closest_metastable(uR, k) 			# we are closest to the nth metastable boundary
 			metaEnergy = metastable_energy(n, k)	# the energy of the nth metastable boundary
-			energyToRight = k*uR**2 - metaEnergy + dx*(energyDensity.sum(dim='x', dtype=float) - energyDensity.cumsum(dim='x', dtype=float))
+			energyToRight += k*uR**2 - metaEnergy
+			#########################################################################
+
+			# import matplotlib.pyplot as plt
+			# plt.plot(x, energyToRight)
+			# plt.show()
+
 			rightAllowedBoundaryIndex = np.where(energyToRight < 1)[0][0]
 
 			# within these regions find the minimum of the error function, biased
 			# slightly towards reducing the distance between xL and xR
-			xLIndex = np.argmin(errfunc[:leftAllowedBoundaryIndex] - 1e-5*x[:leftAllowedBoundaryIndex])
-			xRIndex = rightAllowedBoundaryIndex+np.argmin(errfunc[rightAllowedBoundaryIndex:] + 1e-5*x[rightAllowedBoundaryIndex:])
+			xLIndex = np.argmin(errfunc[:leftAllowedBoundaryIndex] - 1e-6*x[:leftAllowedBoundaryIndex])
+			xRIndex = rightAllowedBoundaryIndex+np.argmin(errfunc[rightAllowedBoundaryIndex:] + 1e-6*x[rightAllowedBoundaryIndex:])
 
 			# sometimes (when there is a boundary breather) there is too much energy at the boundary
 			# so xR ends up being on the boundary even though the field is nowhere near the full line vacuum
 			# therefore enforce a minimum of -20 for xR
 			maxError = .1
 			if x[xRIndex] > -20 and errfunc[xRIndex] > 10*maxError:
-				warnings.warn('xR was at %.3f due to the energy at the boundary but will instead be set to -20.  Consider allowing time evolution to run for longer.'%x[xRIndex], RuntimeWarning)
-				xRIndex = np.argmin(abs(x+20))
+				warnings.warn('xR was at %.3f due to the large amount of energy at the boundary but will instead be set to -20.  Consider allowing time evolution to run for longer.'%x[xRIndex], RuntimeWarning)
+
+				# Ignore boundary oscillations and look for lowest error in -100 < x < -20
+				minus20Index = int(np.argmin(abs(x+20)))
+				rightAllowedBoundaryIndex = int(np.argmin(abs(x+100)))
+				xRIndex = rightAllowedBoundaryIndex+np.argmin(errfunc[rightAllowedBoundaryIndex:minus20Index] + 1e-10*x[rightAllowedBoundaryIndex:minus20Index])
+
 
 			if errfunc[xLIndex] > maxError:
-				warnings.warn('At xL uerr=%.3f, uterr=%.3f, uxerr=%.3f.  Consider allowing time evolution to run for longer.'%(uerr, uterr, uxerr), RuntimeWarning)
+				warnings.warn('At xL uerr=%.3f, uterr=%.3f, uxerr=%.3f.  Consider allowing time evolution to run for longer.'%(uerr[xLIndex], uterr[xLIndex], uxerr[xLIndex]), RuntimeWarning)
 			if errfunc[xRIndex] > maxError:
-				warnings.warn('At xR uerr=%.3f, uterr=%.3f, uxerr=%.3f.  Consider allowing time evolution to run for longer.'%(uerr, uterr, uxerr), RuntimeWarning)
+				warnings.warn('At xR uerr=%.3f, uterr=%.3f, uxerr=%.3f.  Consider allowing time evolution to run for longer.'%(uerr[xRIndex], uterr[xRIndex], uxerr[xRIndex]), RuntimeWarning)
 
 			indexLims[indexDict][:] = np.array([xLIndex, xRIndex], dtype=int)
 
