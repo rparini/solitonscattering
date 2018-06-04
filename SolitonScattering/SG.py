@@ -2,7 +2,7 @@ from __future__ import division
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.integrate import simps
-from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log, arctan2, sinh, tanh
+from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf, log, arctan2, sinh, tanh, arccos
 import warnings
 import xarray as xr
 import math
@@ -414,7 +414,7 @@ class SineGordon(PDE):
 				wronskian_selection.update(indexDict)
 
 				W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
-				C = boundStateRegion(vRange)
+				C = boundStateRegion(vRange, maxFreq)
 
 				try:
 					rootFindingKwargsOriginal = rootFindingKwargs
@@ -801,7 +801,7 @@ def charge(u):
 	return int(Q[rBndry]-Q[lBndry])
 
 
-def boundStateRegion(vRange):
+def boundStateRegion(vRange, maxFreq=1):
 	from cxroots import AnnulusSector
 	# get the region in which to look for bound state eigenvalues
 	radiusBuffer = 0.05
@@ -809,7 +809,9 @@ def boundStateRegion(vRange):
 	# With lambda=mu in Eq.9 of "Breaking integrability at the boundary"
 	# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
 	mu = lambda v: 0.25j*sqrt((1-v)/(1+v))
-	phiRange = [0,pi]
+
+	acosFeq = arccos(maxFreq)
+	phiRange = [acosFeq, pi-acosFeq]
 
 	radiusRange = np.sort(np.abs(mu(np.array(vRange))))
 	radiusRange = [radiusRange[0]-radiusBuffer,
@@ -906,7 +908,7 @@ class ScatteringData(object):
 		import matplotlib.pyplot as plt
 		types = self.decode_types(self.data['types'].data)
 
-		C = boundStateRegion(self.data.attrs['vRange'])
+		C = boundStateRegion(self.data.attrs['vRange'], self.data.attrs['maxFreq'])
 
 		path = C(np.linspace(0,1,1e3))
 		plt.plot(path.real, path.imag, linestyle='--', color='k')
