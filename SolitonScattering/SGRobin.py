@@ -1,8 +1,9 @@
 import numpy as np
-from scipy import pi, sqrt, cos, sign, sin
+from scipy import pi, sqrt, cos, sign, sin, log, tan, arctan, exp
 from matplotlib import pyplot as plt
 
 from scipy.optimize import brentq
+from scipy.integrate import simps
 
 def metastable_u0s(k, includeNegativeu0=True):
 	# compute all the values of u0 corresponding to metastable boundaries
@@ -25,6 +26,30 @@ def metastable_u0s(k, includeNegativeu0=True):
 		n += 1
 
 	return np.array(u0List)
+
+def metastable_u0(n, k):
+	# the value of the field at the boundary corresponding to the nth metastable vacuum
+	if k < 0:
+		raise NotImplemented('Metastable boundaries for negative k not implemented')
+
+	errFunc = lambda u0: k*u0 - abs(sin(u0/2))
+	return brentq(errFunc, 2*pi*n-pi, 2*pi*n)
+
+def antikink_x0(u0):
+	# u = 4*arctan(exp(x0-x)) + 2*pi*m
+	m = u0//(2*pi)
+	return log(tan(0.25*(u0-2*m*pi)))
+
+def kink_x0(u0):
+	# u = 4*arctan(exp(x-x0)) + 2*pi*m
+	m = u0//(2*pi)
+	return -log(tan(0.25*(u0-2*m*pi)))
+
+def metastable_antikink(n, k):
+	u0 = metastable_u0(n, k)
+	x0 = antikink_x0(u0)
+	return lambda x: 4*arctan(exp(x0-x)) + 2*pi*(u0//(2*pi))
+
 
 def metastable_energy(n, k):
 	# energy of the nth metastable state
