@@ -1,6 +1,5 @@
 *build
 *.mov
-*.pdf
 SolitonScattering/CUtilities_caller.cpp
 .cache/v/cache/lastfailed
 *.so
