@@ -417,16 +417,29 @@ class SineGordon(PDE):
 				C = boundStateRegion(vRange)
 
 				try:
-					if verbose >= 3:
-						rootFindingKwargs.update({'automaticAnim':True})
-						rootResult = C.demo_roots(W, **rootFindingKwargs)
-					else:
-						rootResult = C.roots(W, **rootFindingKwargs)
-					r, m = rootResult.roots, rootResult.multiplicities
+					rootFindingKwargsOriginal = rootFindingKwargs
+					while True:
+						if verbose >= 3:
+							rootFindingKwargs.update({'automaticAnim':True})
+							rootResult = C.demo_roots(W, **rootFindingKwargs)
+						else:
+							rootResult = C.roots(W, **rootFindingKwargs)
+						r, m = rootResult.roots, rootResult.multiplicities
 
-					if r and np.any(np.array(m) != 1):
+						if r and np.all(np.array(m) == 1):
+							# multiplicites are all 1
+							break
+
+						# multiplicities are not all 1
 						print(rootResult)
-						raise RuntimeError('Multiplicities are not all 1!')
+						if rootFindingKwargs['M'] == 1:
+							raise RuntimeError('Multiplicities are not all 1!')
+						else:
+							print('Multiplicites not all 1!  Will try again with M=1.')
+							rootFindingKwargs['M'] = 1
+
+					rootFindingKwargs = rootFindingKwargsOriginal
+
 				except Exception as e:
 					raise e
 					print('Skipping ', indexDict)
