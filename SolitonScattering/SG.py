@@ -451,7 +451,7 @@ class SineGordon(PDE):
 
 
 				# store computed eigenvalues and types
-				typedEigenvalues = self.typeEigenvalues(r, u[indexDict])
+				typedEigenvalues = self.typeEigenvalues(r, selection=wronskian_selection)
 				t = np.array([self.type_encoding[ty] for ty in typedEigenvalues], dtype=type_dtype)
 				eigenvalue_array[index] = r
 				type_array[index] = t
