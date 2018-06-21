@@ -105,10 +105,8 @@ def timeStepFunc(stepFunc):
 
 
 class PDE(object):
-	def __init__(self, state, saveInitialState=False):
+	def __init__(self, state):
 		self.state = state
-		if saveInitialState:
-			self._initialState = deepcopy(state)
 
 	@property
 	def state(self):
@@ -135,9 +133,6 @@ class PDE(object):
 		else:
 			raise TypeError("The given state should be an xarray Dataset with data_vars or attributes:", self.requiredStateKeys)
 
-	def reset_state(self):
-		# reset the state of the field to the state it was in when the instance was first initilized
-		self.state = self._initialState
 
 	def save(self, saveFile):
 		if saveFile[-3:] != '.nc':
