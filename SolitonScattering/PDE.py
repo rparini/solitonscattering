@@ -155,7 +155,7 @@ class PDE(object):
 			del self._indexLims
 
 		if type(timeStepFunc) == str:
-			# if a name of a time step function is given then return that
+			# if a name of a time step function is given then use that
 			timeStepFunc = self.named_timeStepFuncs[timeStepFunc]
 
 		if callable(tFin):
