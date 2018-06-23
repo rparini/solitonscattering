@@ -86,11 +86,7 @@ def timeStepFunc(stepFunc):
 
 		# take time step
 		newVals = stepFunc(**funcArgs)
-
-		# Update attributes
-		for key in newVals:
-			if key in state.attrs:
-				state.attrs[key] = newVals[key]
+		state.attrs['t'] += funcArgs['dt']
 
 		oldSize = [state[key].size for key in newVals if key not in state.attrs]
 		newSize = [newVals[key].size for key in newVals if key not in state.attrs]

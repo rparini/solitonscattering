@@ -59,7 +59,7 @@ def breather(x, t, v, w, x0, xi = -pi/2):
 
 #### Time Stepping Methods ####
 @timeStepFunc
-def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
+def euler_robin(x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 	dx = float(x[1] - x[0])
 
 	# save the value of the left and right boundaries for later use
@@ -107,11 +107,9 @@ def euler_robin(t, x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 			u = xr.concat([newData['u'], u], dim='x')
 			ut = xr.concat([newData['ut'], ut], dim='x')
 
-	# increment time forward a step
-	t += dt
-	
 	# return anything which might have changed
-	return {'t':t, 'x':x, 'u':u, 'ut':ut}
+	# XXX: should be doing everything in place!  So if we move dynamic range then shouldn't need x, u, ut
+	return {'x':x, 'u':u, 'ut':ut}
 
 # def euler_magnetic(t, x, u, ut, dt, k, dirichletValue=2*pi):
 # 	dx = x[1] - x[0]
