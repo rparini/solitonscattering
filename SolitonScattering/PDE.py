@@ -3,7 +3,7 @@ import numpy as np
 import scipy
 from scipy import sqrt, cos, sin, arctan, exp, cosh, pi, inf
 from copy import deepcopy
-from warnings import warn
+import warnings
 import inspect
 import math
 import xarray as xr
@@ -14,7 +14,7 @@ from . import ODE
 try:
 	import matplotlib
 except ImportError:
-	warn('Unable to import matplotlib')
+	warnings.warn('Unable to import matplotlib')
 
 isnparray = lambda x: isinstance(x, np.ndarray)
 
@@ -137,7 +137,13 @@ class PDE(object):
 	def save(self, saveFile):
 		if saveFile[-3:] != '.nc':
 			saveFile += '.nc'
-		self.state.to_netcdf(saveFile, engine='h5netcdf')
+
+		with warnings.catch_warnings():
+			warnings.simplefilter("ignore")
+			self.state.to_netcdf(saveFile, engine='h5netcdf')
+
+		### Need 'invalid_netcdf=True' option to be added in xarray
+		# self.state.to_netcdf(saveFile, engine='h5netcdf', invalid_netcdf=True)
 
 	def time_evolve(self, timeStepFunc, tFin, progressBar=True, callbackFunc=None, **timeStepArgs):
 		# tFin should be a real number or a function which returns a real number
