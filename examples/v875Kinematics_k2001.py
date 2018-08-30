@@ -25,12 +25,12 @@ state = SG.kink(x,0,v0,x0,-1)
 field = SG.SineGordon(state)
 for t in [1000]:
 	field.time_evolve('euler_robin', t+abs(x0)/v0, dt=dt, k=k, dirichletValue=2*pi, dynamicRange=True)
-	field.save(f'v875Kinematics_t{t}_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc') # save field to disk
+	field.save(f'v875Kinematics_k{len(k)}_t{t}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc') # save field to disk
 
 ### Find the bound state eigenvalues associated with the solitons produced in the antikink/boundary collision
 ### Ignore any breathers with frequency > 0.999
-fieldFileName = f'v875Kinematics_t1000_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc'
-eigenFileName = f'v875Kinematics_t1000_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_eigenvalues.nc'
+fieldFileName = f'v875Kinematics_k{len(k)}_t1000_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc'
+eigenFileName = f'v875Kinematics_k{len(k)}_t1000_dx{str(dx)[2:]}_dt{str(dt)[2:]}_eigenvalues.nc'
 with xr.open_dataset(fieldFileName, engine='h5netcdf') as state:
 	print(state)
 	field = SG.SineGordon(state) # load field state from disk
