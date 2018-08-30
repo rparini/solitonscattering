@@ -23,17 +23,16 @@ state = SG.kink(x,0,v0,x0,-1)
 field = SG.SineGordon(state)
 tList = [100] # t=100 -> ~104 hours compute time!  Hope to get this down in the future.
 for t in tList:
-	field.time_evolve('euler_robin', t+abs(x0)/v0, dt=dt, k=k, 
-		dirichletValue=2*pi, asymptoticBoundary={'L':2*pi})
-	field.save('Kinematics_v95_t%s_k%i_dx0025_dt002_field.nc'%(str(t), len(k))) # save field to disk
+	field.time_evolve('euler_robin', t+abs(x0)/v0, dt=dt, k=k, dirichletValue=2*pi, asymptoticBoundary={'L':2*pi})
+	field.save(f'v95Kinematics_t{t}_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc') # save field to disk
 
-### Compute the bound state eigenvalues
-fieldFileName = 'Kinematics_v95_t100_k%i_dx0025_dt002_field.nc'%len(k)
-eigenFileName = 'Kinematics_v95_t100_k%i_dx0025_dt002_eigenvalues.nc'%len(k)
+### Find the bound state eigenvalues associated with the solitons produced in the antikink/boundary collision
+### Ignore any breathers with frequency > 0.999
+fieldFileName = f'v95Kinematics_t100_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc'
+eigenFileName = f'v95Kinematics_t100_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_eigenvalues.nc'
 with xr.open_dataset(fieldFileName, engine='h5netcdf') as state:
 	print(state)
 	field = SG.SineGordon(state)
-
 	eigenvalues = field.boundStateEigenvalues(
 		vRange=[-0.955, 0.1], 
 		maxFreq=0.999,
@@ -45,9 +44,11 @@ print(eigenvalues)
 
 ### Plot the kinematics of the solitons produced in the antikink/boundary collision
 from matplotlib import pyplot as plt
-eigenvalues.plot_2Dkinematics(axis='k')
-plt.title('$v_0=0.95$')
+with xr.open_dataset(eigenFileName, engine='h5netcdf') as eigenvalues:
+	eigenvalues = SG.ScatteringData(eigenvalues)
+	eigenvalues.plot_2Dkinematics(axis='k')
+plt.title(f'$v_0={v0}$')
 plt.xlim(0.06, 0.075)
-plt.savefig('Kinematics_v95_k%i.pdf'%len(k), bbox_inches='tight')
+plt.savefig(f'v95Kinematics_k{len(k)}.pdf', bbox_inches='tight')
 plt.close()
 
