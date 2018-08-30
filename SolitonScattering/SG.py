@@ -32,6 +32,8 @@ def kink(x, t, v, x0, epsilon=1):
 
 @stateFunc
 def breather(x, t, v, w, x0, xi = -pi/2):
+	xi += pi/2	# to keep with Fig.17 of "Breaking integrability at the boundary"
+
 	W = sqrt(1-w**2)
 	g = 1/sqrt(1-v**2)
 	Sin = sin(w*g*(t-v*(x-x0)) + xi)
@@ -58,58 +60,60 @@ def breather(x, t, v, w, x0, xi = -pi/2):
 # 	return {'t':0, 'x':x, 'u':u, 'ut':ut}
 
 #### Time Stepping Methods ####
+# @profile
 @timeStepFunc
-def euler_robin(x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
+def euler_robin(u, ut, k, x, dt, dirichletValue=2*pi):
+	# u is a numpy array with the x coordinate on the last axis
+	# XXX k needs to be on a particular axis
+
 	dx = float(x[1] - x[0])
 
-	# save the value of the left and right boundaries for later use
-	# XXX: any way to avoid this copying?
-	uRightOld = u[{'x':-1}].copy(deep=True)
+	# save the value of right boundary for later use
+	# uRightOld = u[{'x':-1}].copy(deep=True)
+	uRightOld = u[...,-1]
 
-	# u_tt = u_xx - sin(u)
-	# Get u_tt by using a second order central difference formula to calcuate u_xx
-	utt = (u.shift(x=-1) - 2*u + u.shift(x=1))/dx**2 - sin(u)
+	### u_tt = u_xx - sin(u)
+	### Get u_tt by using a second order central difference formula to calcuate u_xx
+	# if type(u) is np.ndarray or type(u) is xr.core.dataarray.DataArray:
+	# 	# utt = (np.roll(u, -1, axis=-1) - 2*u + np.roll(u, 1, axis=-1))/dx**2 - np.sin(u)
+	# 	utt = (u[...,:-2] - 2*u[...,1:-1] + u[...,2:])/dx**2 - np.sin(u[...,1:-1])
+	# else:
+	# 	import cupy as cp
+	# 	utt = (u[...,:-2] - 2*u[...,1:-1] + u[...,2:])/dx**2 - cp.sin(u[...,1:-1])
+	# 	# utt = (cp.roll(u, -1, axis=-1) - 2*u + cp.roll(u, 1, axis=-1))/dx**2 - cp.sin(u)
 
-	# Use utt in a simple (Euler) integration routine:
-	ut += dt * utt
-	u  += dt * ut
 
-	# Impose Robin boundary condition at the right hand end
-	u[{'x':-1}] = u[{'x':-2}]/(1 + 2*k*dx)
+	utt = (u[...,:-2] - 2*u[...,1:-1] + u[...,2:])/dx**2 - np.sin(u[...,1:-1])
+
+
+	### Use utt in a simple (Euler) integration routine:
+	### Note: u, ut should be modified in place!
+	ut[...,1:-1] += dt*utt
+	u[...,1:-1]  += dt*ut[...,1:-1]
 
 	# Impose Dirichlet boundary condition at left:
-	u[{'x':0}]  = dirichletValue
-	ut[{'x':0}] = 0
+	# For the sake of Dask avoid item assignment
+	# u[{'x':0}]  = dirichletValue
+	# ut[{'x':0}] = 0
+	u[...,0]  = dirichletValue
+	ut[...,0] = 0
+	# u[:] = u.where(u.x != u.x[0], dirichletValue)
+	# ut[:] = ut.where(ut.x != ut.x[0], 0)
+
+	# Impose Robin boundary condition at the right hand end
+	# NotImplementedError: Lazy item assignment with the vectorized indexer is not yet implemented. Load your data first by .load() or compute().
+	# u[{'x':-1}] = u[{'x':-2}]/(1 + 2*k*dx)
+	# u[:] = u.where(u.x != u.x[-1], u[{'x':-2}]/(1 + 2*k*dx))
+	u[...,-1] = u[...,-2]/(1 + 2*k*dx)
 
 	# Rolling messes ut up at the boundaries so fix here:
-	ut[{'x':-1}] = (u[{'x':-1}] - uRightOld) / dt
+	# ut[{'x':-1}] = (u[{'x':-1}] - uRightOld)/dt
+	# ut[:] = ut.where(ut.x != ut.x[-1], (u[{'x':-1}] - uRightOld)/dt)
+	ut[...,-1] = (u[...,-1] - uRightOld) / dt
 
-	if dynamicRange:
-		checkRange = 10
-		newPoints = 10**4
-		# check if there is anything within checkRange spatial points of the left boundary
-		if np.any(abs(u[{'x':slice(0,checkRange)}]-dirichletValue) > 1e-4):
-			# add another newPoints points on to the end
-			newPoints = np.linspace(float(x[0]-newPoints*dx), float(x[0]-dx), newPoints)
 
-			# create new data points for the new region
-			newSize = dict([(key, u.sizes[key]) for key in u.sizes]) # copy dictionary
-			newSize['x'] = len(newPoints)
 
-			newCoords = dict([(key, u.coords[key]) for key in u.coords]) # copy dictionary
-			newCoords['x'] = newPoints
 
-			newData = xr.Dataset(data_vars = {'u':(u.dims, dirichletValue*np.ones([newSize[key] for key in u.dims])),
-								  			  'ut':(ut.dims, np.zeros([newSize[key] for key in ut.dims]))}, 
-								 coords = newCoords)
-
-			x = np.insert(x, 0, newPoints)
-			u = xr.concat([newData['u'], u], dim='x')
-			ut = xr.concat([newData['ut'], ut], dim='x')
-
-	# return anything which might have changed
-	# XXX: should be doing everything in place!  So if we move dynamic range then shouldn't need x, u, ut
-	return {'x':x, 'u':u, 'ut':ut}
 
 # def euler_magnetic(t, x, u, ut, dt, k, dirichletValue=2*pi):
 # 	dx = x[1] - x[0]
@@ -187,24 +191,22 @@ def euler_robin(x, u, ut, dt, k, dirichletValue=2*pi, dynamicRange=True):
 # 	return {'t':t, 'x':x, 'u':u, 'ut':ut}
 
 
-
 class SineGordon(PDE):
 	# how to store types on disk (for sine-Gordon topological charge is used)
 	type_encoding = {'Kink':1, 'Antikink':-1, 'Breather':0, 'Unknown':9}
 
-	def __init__(self, state):
+	def __init__(self, *args, **kwargs):
 		"""x, u, ut should be 1D numpy arrays which define the initial conditions
 		timeStep should either be an explicit time step function which takes (t, x, u, ut, dt, *args) 
 			and returns the state of the field at time t+dt or a string which is the key in named_timeStepFunc
 		"""
 		self.requiredStateKeys = ['t', 'x', 'u', 'ut'] # everything needed to evolve sine-Gordon one step in time
-		self.named_timeStepFuncs = {'eulerRobin': euler_robin}
-		# self.named_timeStepFuncs = {'eulerRobin': euler_robin,
-		# 						   'eulerMagnetic': euler_magnetic,
-		# 						   'eulerIntegrable': euler_integrable}
+		self.named_timeStepFuncs = {'euler_robin': euler_robin,
+									}
+
 		self.named_solutions = {'kink':kink, 'breather':breather}
 
-		super(SineGordon, self).__init__(state)
+		super(SineGordon, self).__init__(*args, **kwargs)
 
 	def setticks(self):
 		# mark yticks in multiples of pi
@@ -292,6 +294,9 @@ class SineGordon(PDE):
 		# As in Eq. II.2 in "Spectral theory for the periodic sine-Gordon equation: A concrete viewpoint" with lambda=Sqrt[E]
 		E = exp(-1j*(mu-1/(16*mu))*x)
 
+		# for i, m in np.ndenumerate(mu):
+		# 	print('mu', complex(m), 'E', complex(E[i]))
+
 		return xr.concat([E, -1j*E], dim='Phii')
 
 	def right_asyptotic_eigenfunction(self, mu, x):
@@ -310,7 +315,8 @@ class SineGordon(PDE):
 
 		return xr.concat([E, 1j*E], dim='Phii')
 
-	def boundStateEigenvalues(self, vRange, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, verbose=1, saveFile=None):
+	def boundStateEigenvalues(self, vRange, maxFreq=1, ODEIntMethod='CRungeKuttaArray', rootFindingKwargs={}, selection={}, 
+		verbose=1, saveFile=None):
 		# if saveFile is given then the eigenvalues will be saved to disk as they are computed
 
 
@@ -319,15 +325,16 @@ class SineGordon(PDE):
 
 		# Set custom defaults.  These can be overridden using rootFindingKwargs
 		rootFindingKwargs.setdefault('guessRootSymmetry', lambda z: [-z.conjugate()])	# roots occour either on the imaginary axis or in pairs with opposite real parts
-		rootFindingKwargs.setdefault('absTol', 1e-3)
-		rootFindingKwargs.setdefault('relTol', 1e-3)
+		rootFindingKwargs.setdefault('absTol', 1e-4)
+		rootFindingKwargs.setdefault('relTol', 1e-4)
 		rootFindingKwargs.setdefault('M', 2)
 		rootFindingKwargs.setdefault('divMin', 5)
 		rootFindingKwargs.setdefault('divMax', 20)
 		rootFindingKwargs.setdefault('m', 2) 	# 2*m+1 stencil size for numerical differentiation during contour integration
-		rootFindingKwargs.setdefault('NintAbsTol', .02)
+		rootFindingKwargs.setdefault('NIntAbsTol', .02)
 		rootFindingKwargs.setdefault('integerTol', .1)
 		rootFindingKwargs.setdefault('intMethod', 'romb')
+		rootFindingKwargs.setdefault('guessRoots', [])
 
 		if verbose >= 2:
 			rootFindingKwargs['verbose'] = True
@@ -335,7 +342,7 @@ class SineGordon(PDE):
 			rootFindingKwargs['verbose'] = False
 
 		# add any remaining defaults to rootFindingKwargs
-		rootArgs, rootVarargs, rootKeywords, rootDefaults = inspect.getargspec(cxroots.RootFinder.findRootsGen)
+		rootArgs, rootVarargs, rootKeywords, rootDefaults = inspect.getargspec(cxroots.RootFinder.find_roots_gen)
 		rootDefaultDicts = dict(zip(rootArgs[-len(rootDefaults):], rootDefaults))
 		for key, val in rootDefaultDicts.items():
 			rootFindingKwargs.setdefault(key, val)
@@ -416,27 +423,24 @@ class SineGordon(PDE):
 
 				try:
 					rootFindingKwargsOriginal = rootFindingKwargs
-					while True:
-						if verbose >= 3:
-							rootFindingKwargs.update({'automaticAnim':True})
-							rootResult = C.demo_roots(W, **rootFindingKwargs)
-						else:
-							rootResult = C.roots(W, **rootFindingKwargs)
-						r, m = rootResult.roots, rootResult.multiplicities
 
-						if r and np.all(np.array(m) == 1):
-							# multiplicites are all 1
-							break
+					if verbose >= 3:
+						rootFindingKwargs.update({'automaticAnim':True})
+						rootResult = C.demo_roots(W, **rootFindingKwargs)
+					else:
+						rootResult = C.roots(W, **rootFindingKwargs)
 
+					if np.any(np.array(rootResult.multiplicities) != 1):
 						# multiplicities are not all 1
-						print(rootResult)
 						if rootFindingKwargs['M'] == 1:
 							raise RuntimeError('Multiplicities are not all 1!')
 						else:
 							print('Multiplicites not all 1!  Will try again with M=1.')
-							rootFindingKwargs['M'] = 1
+							rootFindingKwargsTemp = rootFindingKwargs.copy()
+							rootFindingKwargsTemp.update({'M':1, 'guessRoots':rootResult.roots})
+							rootResult = C.roots(W, **rootFindingKwargsTemp)
 
-					rootFindingKwargs = rootFindingKwargsOriginal
+					r, m = rootResult.roots, rootResult.multiplicities
 
 				except Exception as e:
 					raise e
@@ -446,7 +450,6 @@ class SineGordon(PDE):
 					if makeProgressbar:
 						progressBar.update()
 					continue
-
 
 				# store computed eigenvalues and types
 				typedEigenvalues = self.typeEigenvalues(r, selection=wronskian_selection)
@@ -579,6 +582,12 @@ class SineGordon(PDE):
 			# elif 'k' in self.state.coords.keys():
 			# 	k = self.state['k'][selection][indexDict]
 			k = getval(self.state[selection][indexDict], 'k')
+
+			# if uxR < 0:
+			# 	n = math.ceil(uR/(2*pi))
+			# else:
+			# 	n = math.floor(uR/(2*pi))
+
 			n = closest_metastable(uR, k) 			# we are closest to the nth metastable boundary
 			metaEnergy = metastable_energy(n, k)	# the energy of the nth metastable boundary
 			energyToRight += k*uR**2 - metaEnergy
@@ -701,18 +710,21 @@ class SineGordon(PDE):
 			if getval(self.state, 'k') is not None:
 				timeStepFunc = 'euler_robin' 	### XXX: Need a better way to decide that we are using the Robin boundary
 
-			t0 = getval(self.state, 't')
-
 			tempField = SineGordon(self.state[selection])
+			### In time evolution get:
+			### NotImplementedError: Lazy item assignment with the vectorized indexer is not yet implemented. 
+			### Load your data first by .load() or compute().
+			tempField.state.load()
 
-			t = getval(tempField.state, 't')
+			t = t0 = getval(tempField.state, 't')
+			dt = self.state.attrs['dt']
+			k = getval(tempField.state, 'k')
 			while t < t0 + 5 or get_typedPositions(tempField.state['u'], tempField.state['x']) == None:
-				dt = self.state.attrs['dt']
 				t = getval(tempField.state, 't')
 				if timeStepFunc == 'euler_robin':
-					k = getval(self.state, 'k')
-					tempField.time_evolve(timeStepFunc, t+dt, progressBar=False, dt=dt, k=k, dirichletValue=2*pi, dynamicRange=True)
-			t1 = t
+					tempField.time_evolve(timeStepFunc, t+dt, progressBar=False, dt=dt, k=k, 
+						dirichletValue=2*pi, asymptoticBoundary={'L':2*pi})
+			t1 = getval(tempField.state, 't')
 
 			# get the position of the kink and antikink at t1
 			typedPos1 = get_typedPositions(tempField.state['u'], tempField.state['x'])
@@ -951,7 +963,7 @@ class ScatteringData(object):
 		else:
 			plt.show()
 
-	def plot_2Dkinematics(self, axis, showLabels=True, saveFile=None):
+	def plot_2Dkinematics(self, axis, showLabels=True, linewidth=1, saveFile=None):
 		import matplotlib.pyplot as plt
 		for t in ['Kink', 'Antikink', 'Breather']:
 			data = self.data.where(self.data['types'] == SineGordon.type_encoding[t])
@@ -960,7 +972,8 @@ class ScatteringData(object):
 			freq = abs(solitonFrequency(data['eigenvalues']))
 			freq = freq.where(freq < .999)
 			if t == 'Breather':
-				plt.plot(data[axis], np.sort(freq)[:,0], 'k', linestyle='--', label='Breather Frequency')
+				plt.plot(data[axis], np.sort(freq)[:,0], 'k', linestyle='--',
+					linewidth=linewidth, label='Breather Frequency')
 
 			# plot speed
 			speed = abs(solitonVelocity(data['eigenvalues']))
@@ -970,7 +983,7 @@ class ScatteringData(object):
 				speed = speed[:, np.argsort(freq)[:,0]]
 			else:
 				speed = np.sort(speed)
-			plt.plot(data[axis], speed, self.colorDict[t], label=t+' Speed')
+			plt.plot(data[axis], speed, self.colorDict[t], label=t+' Speed', linewidth=linewidth)
 
 		### remove duplicate labels
 		from collections import OrderedDict

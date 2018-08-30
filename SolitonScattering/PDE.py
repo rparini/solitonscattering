@@ -10,6 +10,7 @@ import xarray as xr
 import itertools
 
 from . import ODE
+from .timeStep import timeStepFunc
 
 try:
 	import matplotlib
@@ -58,48 +59,6 @@ def stateFunc(fieldFunc):
 	return dataset_wrap
 
 
-def timeStepFunc(stepFunc):
-	def timestep_wrap(state, **timestepKwargs):
-		# include defaults explicitly
-		# argnames, varargs, kwargs, defaults = inspect.getargspec(fieldFunc)
-		defaults = inspect.getargspec(stepFunc)[3]
-		tempkwargs = dict((key, defaults[i]) for i, key in enumerate(inspect.getargspec(stepFunc)[0][-len(defaults):]))
-		tempkwargs.update(timestepKwargs)
-		timestepKwargs = tempkwargs
-
-		# figure out what variables we're vectorizing over (only numpy arrays)
-		vectorize = [key for key in timestepKwargs.keys() if isnparray(timestepKwargs[key])]
-
-		for key in timestepKwargs.keys():
-			if key not in state.keys():
-				if key in vectorize:
-					# introduce new dimensions to vectorize over
-					state = xr.concat([state]*len(timestepKwargs[key]), dim=key)
-					state[key] = timestepKwargs[key]
-
-				else:
-					# anything we are not vectorizing over should be an attribute
-					state.attrs[key] = timestepKwargs[key]
-
-		# pass state to the timeStepFunc
-		funcArgs = dict((key, getval(state, key)) for key in inspect.getargspec(stepFunc)[0] if getval(state, key) is not None)
-
-		# take time step
-		newVals = stepFunc(**funcArgs)
-		state.attrs['t'] += funcArgs['dt']
-
-		oldSize = [state[key].size for key in newVals if key not in state.attrs]
-		newSize = [newVals[key].size for key in newVals if key not in state.attrs]
-		if np.any(oldSize != newSize):
-			# the size of the state has changed so we need to create a new one
-			# doesn't seem possible to update state 'in place' with the new coordinates
-			state = xr.Dataset(data_vars = dict((key, newVals[key]) for key in state.data_vars.keys()), 
-							   attrs = state.attrs)
-
-		return state
-	return timestep_wrap
-
-
 class PDE(object):
 	def __init__(self, state):
 		self.state = state
@@ -123,12 +82,15 @@ class PDE(object):
 			self.state = xr.open_dataset(stateVal, engine='h5netcdf')
 
 		stateValKeys = set(stateVal.data_vars.keys()).union(set(stateVal.attrs)).union(set(stateVal.coords))
-		if not self.requiredStateKeys or set(self.requiredStateKeys).issubset(stateValKeys):
+		if not self.requiredStateKeys or set(self.requiredStateKeys).issubset(stateValKeys):	
 			# set the time step funciton as the given dictionary
 			self._state = stateVal
 		else:
 			raise TypeError("The given state should be an xarray Dataset with data_vars or attributes:", self.requiredStateKeys)
 
+		# Fields and derivatives should have their dimensions in the same order
+		self._state['u'] = self._state['u'].transpose(*(dim for dim in self._state['u'].dims if dim != 'x'), 'x')	# put x in the last slot
+		self._state['ut'] = self._state['ut'].transpose(*self._state['u'].dims)	# align order of ut dimensions with u
 
 	def save(self, saveFile):
 		if saveFile[-3:] != '.nc':
@@ -178,8 +140,6 @@ class PDE(object):
 
 			# create array of tFin
 			tFin = xr.apply_ufunc(tFin, *tFinArgs, kwargs=tFinKwargs)
-
-
 			
 		### store values of t as an array if necessary
 		### XXX: doesn't seem to be an isxarray()
@@ -208,27 +168,12 @@ class PDE(object):
 			pBar = tqdm(total=N, desc='Time Evolution')
 		else:
 			progressBar = False
-			
-		while np.any(t < tFin):
-			# pass the time step function the current state and any additional given arguments
-			if isinstance(t, xr.core.dataarray.DataArray):
-				newstate = timeStepFunc(self.state.where(t < tFin), **timeStepArgs)
-
-				# replace nan with old state
-				self.state = newstate.fillna(self.state)
-			
-			else:
-				self.state = timeStepFunc(self.state, **timeStepArgs)
-
-			t = getval(self.state, 't')
-
-			if progressBar:
-				pBar.update()
-
-			if callbackFunc is not None:
-				exit = callbackFunc(self)
-				if exit:
-					return
+		
+		if isinstance(t, xr.core.dataarray.DataArray):
+			for tf in tFin.sortby(tFin):
+				self.state = timeStepFunc(self.state.where(getval(self.state, 't') < tFin), float(tf), progressBar=pBar, **timeStepArgs).fillna(self.state)
+		else:
+			self.state = timeStepFunc(self.state, tFin, progressBar=pBar, **timeStepArgs)
 
 		if progressBar:
 			pBar.close()
@@ -330,9 +275,13 @@ class PDE(object):
 
 		# animation function which is called every frame
 		def update_animation(i):
-			for k in range(skipFrames+1):
-				# step the time evolution forward
-				self.state = timeStepFunc(self.state, **timeStepArgs)
+			# for k in range(skipFrames+1):
+			# 	# step the time evolution forward
+			# 	dt = timeStepArgs['dt']
+			# 	self.state = timeStepFunc(self.state, **timeStepArgs)
+
+			dt = timeStepArgs['dt']
+			self.state = timeStepFunc(self.state, i*dt, **timeStepArgs)
 
 			line.set_data(self.state['x'], self.state['u'])
 			timeLabel.set_text('$t = %.1f$' % self.state.attrs['t'])
