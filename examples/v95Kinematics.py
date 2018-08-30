@@ -24,12 +24,12 @@ field = SG.SineGordon(state)
 tList = [100] # t=100 -> ~104 hours compute time!  Hope to get this down in the future.
 for t in tList:
 	field.time_evolve('euler_robin', t+abs(x0)/v0, dt=dt, k=k, dirichletValue=2*pi, asymptoticBoundary={'L':2*pi})
-	field.save(f'v95Kinematics_t{t}_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc') # save field to disk
+	field.save(f'v95Kinematics_k{len(k)}_t{t}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc') # save field to disk
 
 ### Find the bound state eigenvalues associated with the solitons produced in the antikink/boundary collision
 ### Ignore any breathers with frequency > 0.999
-fieldFileName = f'v95Kinematics_t100_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc'
-eigenFileName = f'v95Kinematics_t100_k{len(k)}_dx{str(dx)[2:]}_dt{str(dt)[2:]}_eigenvalues.nc'
+fieldFileName = f'v95Kinematics_k{len(k)}_t100_dx{str(dx)[2:]}_dt{str(dt)[2:]}_field.nc'
+eigenFileName = f'v95Kinematics_k{len(k)}_t100_dx{str(dx)[2:]}_dt{str(dt)[2:]}_eigenvalues.nc'
 with xr.open_dataset(fieldFileName, engine='h5netcdf') as state:
 	print(state)
 	field = SG.SineGordon(state)
