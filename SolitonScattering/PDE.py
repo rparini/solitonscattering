@@ -167,7 +167,7 @@ class PDE(object):
 			N = math.ceil(np.max(tFin-t)/dt)
 			pBar = tqdm(total=N, desc='Time Evolution')
 		else:
-			progressBar = False
+			pBar = False
 		
 		if isinstance(t, xr.core.dataarray.DataArray):
 			for tf in tFin.sortby(tFin):
