@@ -413,11 +413,13 @@ class SineGordon(PDE):
 					if not xr.ufuncs.isnan(eigenvalueData[indexDict][{'eigenvalue_index':0}]):
 						alreadyComputed = True
 						maxNumberOfEigenvalues = eigenvalueData.sizes['eigenvalue_index']
+						r = eigenvalueData[indexDict].data
+						r = r[~np.isnan(r)]
+
+			wronskian_selection = selection.copy()
+			wronskian_selection.update(indexDict)
 
 			if not alreadyComputed:
-				wronskian_selection = selection.copy()
-				wronskian_selection.update(indexDict)
-
 				W = lambda z: np.array(self.eigenfunction_wronskian(z, ODEIntMethod, selection=wronskian_selection), dtype=np.complex128)
 				C = boundStateRegion(vRange, maxFreq)
 
@@ -451,52 +453,54 @@ class SineGordon(PDE):
 						progressBar.update()
 					continue
 
-				# store computed eigenvalues and types
-				typedEigenvalues = self.typeEigenvalues(r, selection=wronskian_selection)
-				t = np.array([self.type_encoding[ty] for ty in typedEigenvalues], dtype=type_dtype)
+				# store computed eigenvalues
 				eigenvalue_array[index] = r
-				type_array[index] = t
 
-				if verbose >= 2:
-					print(print_eigenvalues(np.array(r), np.array(typedEigenvalues)))
+			# compute and store types
+			typedEigenvalues = self.typeEigenvalues(r, selection=wronskian_selection)
+			t = np.array([self.type_encoding[ty] for ty in typedEigenvalues], dtype=type_dtype)
+			type_array[index] = t
 
-				# update maxNumberOfEigenvalues
-				if len(r) > maxNumberOfEigenvalues:
-					maxNumberOfEigenvalues = len(r)
+			if verbose >= 2 and not alreadyComputed:
+				print(print_eigenvalues(np.array(r), np.array(typedEigenvalues)))
 
-				# store computed eigenvalues and types on disk
-				if saveFile:
-					# XXX: is there a way to write incrementally without loading and overwriting the whole array?
-					spectralData = xr.open_dataset(saveFile, engine='h5netcdf')
-					spectralData.load()		# load whole file into memory (by default it is only lazily read)
-					spectralData.close()
+			# update maxNumberOfEigenvalues
+			if len(r) > maxNumberOfEigenvalues:
+				maxNumberOfEigenvalues = len(r)
 
-					if len(spectralData['eigenvalues'][indexDict]) < len(r):
-						# need to extend the array
-						padShape = rootsShape + [len(r) - len(spectralData['eigenvalues'][indexDict])]
-						padded_eigenvalue_array = np.full(padShape, np.nan, dtype=np.complex128)
-						padded_type_array = np.full(padShape, np.nan, dtype=type_dtype)
-						padArray = xr.Dataset({'eigenvalues':(arrayDims, padded_eigenvalue_array),
-											   'types':(arrayDims, padded_type_array)},
-											   coords=rootsCoords, attrs=rootsAttrs)
+			# store computed eigenvalues and types on disk
+			if saveFile:
+				# XXX: is there a way to write incrementally without loading and overwriting the whole array?
+				spectralData = xr.open_dataset(saveFile, engine='h5netcdf')
+				spectralData.load()		# load whole file into memory (by default it is only lazily read)
+				spectralData.close()
 
-						spectralData = xr.concat([spectralData, padArray], dim='eigenvalue_index')
+				if len(spectralData['eigenvalues'][indexDict]) < len(r):
+					# pad out eigenvalue array so that it can be stored as a single complex-valued array
+					padShape = rootsShape + [len(r) - len(spectralData['eigenvalues'][indexDict])]
+					padded_eigenvalue_array = np.full(padShape, np.nan, dtype=np.complex128)
+					padded_type_array = np.full(padShape, np.nan, dtype=type_dtype)
+					padArray = xr.Dataset({'eigenvalues':(arrayDims, padded_eigenvalue_array),
+										   'types':(arrayDims, padded_type_array)},
+										   coords=rootsCoords, attrs=rootsAttrs)
 
-					padded_eigenvalues = np.full(len(spectralData['eigenvalues'][indexDict]), np.nan, dtype=np.complex128)
-					padded_types	   = np.full(len(spectralData['eigenvalues'][indexDict]), np.nan, dtype=type_dtype)
+					spectralData = xr.concat([spectralData, padArray], dim='eigenvalue_index')
 
-					padded_eigenvalues[:len(r)] = r[:]
-					padded_types[:len(r)] 	    = t[:]
+				padded_eigenvalues = np.full(len(spectralData['eigenvalues'][indexDict]), np.nan, dtype=np.complex128)
+				padded_types	   = np.full(len(spectralData['eigenvalues'][indexDict]), np.nan, dtype=type_dtype)
 
-					spectralData['eigenvalues'][indexDict] = padded_eigenvalues[:]
-					spectralData['types'][indexDict] = padded_types[:]
+				padded_eigenvalues[:len(r)] = r[:]
+				padded_types[:len(r)] 	    = t[:]
 
-					with warnings.catch_warnings():
-						# FutureWarning: complex dtypes are supported by h5py, but not part of the NetCDF API. 
-						# You are writing an HDF5 file that is not a valid NetCDF file! In the future, this will 
-						# be an error, unless you set invalid_netcdf=True.
-						warnings.simplefilter(action='ignore', category=FutureWarning)
-						spectralData.to_netcdf(saveFile, engine='h5netcdf')
+				spectralData['eigenvalues'][indexDict] = padded_eigenvalues[:]
+				spectralData['types'][indexDict] = padded_types[:]
+
+				with warnings.catch_warnings():
+					# FutureWarning: complex dtypes are supported by h5py, but not part of the NetCDF API. 
+					# You are writing an HDF5 file that is not a valid NetCDF file! In the future, this will 
+					# be an error, unless you set invalid_netcdf=True.
+					warnings.simplefilter(action='ignore', category=FutureWarning)
+					spectralData.to_netcdf(saveFile, engine='h5netcdf')
 
 			if makeProgressbar:
 				progressBar.update()
@@ -506,21 +510,6 @@ class SineGordon(PDE):
 
 		if skipped:
 			print('Skipped ', skipped)
-
-		# pad out eigenvalue array so that it can be stored as a single complex-valued array
-		arrayShape = rootsShape + [maxNumberOfEigenvalues]
-		padded_eigenvalue_array = np.full(arrayShape, np.nan, dtype=np.complex128)
-		padded_type_array = np.full(arrayShape, np.nan, dtype=type_dtype)
-		for index, dummy in np.ndenumerate(np.empty(rootsShape)):
-			if not np.all(np.isnan(eigenvalue_array[index])):
-				pad = np.full(maxNumberOfEigenvalues - len(eigenvalue_array[index]), np.nan)
-				padded_eigenvalue_array[index] = np.append(eigenvalue_array[index], pad)
-				padded_type_array[index] = np.append(type_array[index], pad)
-
-		# put eigenvalue and type arrays into an xarray Dataset
-		spectralData = xr.Dataset({'eigenvalues':(arrayDims, padded_eigenvalue_array),
-								   'types':(arrayDims, padded_type_array)},
-								   coords=rootsCoords, attrs=rootsAttrs)
 
 		if saveFile:
 			with xr.open_dataset(saveFile, engine='h5netcdf') as oldSpectralData:
@@ -898,7 +887,7 @@ class ScatteringData(object):
 		self.type_decoding = {v: k for k, v in SineGordon.type_encoding.items()}
 
 	def decode_types(self, encodedTypes):
-		return np.array([self.type_decoding[e] if e in self.type_decoding.keys() else e for e in encodedTypes])
+		return np.array([self.type_decoding[e] if e in self.type_decoding.keys() else 'Untyped' for e in encodedTypes])
 
 	def __str__(self):
 		eigenvalues = self.data['eigenvalues']
