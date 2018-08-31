@@ -106,11 +106,11 @@ def timeStepFunc(stepFunc):
 										  			  'ut':(state['ut'].dims, np.zeros([newSize[key] for key in state['ut'].dims]))}, 
 										 coords = newCoords)
 
-					# add t if needed
+					# Copy t to new data set if needed
 					if 't' in state.data_vars:
 						newData['t'] = state['t']
 
-					newState = xr.concat([newData, state], dim='x')
+					newState = xr.concat([newData, state], dim='x', data_vars='minimal')
 					newState.attrs = state.attrs
 					state = newState
 
