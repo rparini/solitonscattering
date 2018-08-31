@@ -78,6 +78,8 @@ def timeStepFunc(stepFunc):
 				state['t'] += funcArgs['dt']
 
 			if progressBar:
+				t = float(np.max(getval(state, 't')))
+				progressBar.postfix = f"t={t}"
 				progressBar.update()
 
 			# implement asymptotic boundary conditions
