@@ -2,6 +2,11 @@ language: python
 python:
   - "3.6"
 
+matrix:
+  include:
+    - os: linux
+    - os: osx
+
 install:
   - pip install -r requirements.txt
   - python setup.py install
