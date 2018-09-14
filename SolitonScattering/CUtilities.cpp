@@ -99,7 +99,12 @@ void RungeKutta(int M, int ySize, double h, cx * y, cx * A, cx * B) {
         for (int i = 0; i < ySize; ++i)
             y[i] += (k1[i] + 2.*k2[i] + 2.*k3[i] + k4[i])/6.;
 
+	    // printf("--------\n");
+	    // for(int i = 0; i < ySize; i++) {
+	    //     printf("%f + %f i\n", real(y[i]), imag(y[i]));
+	    // }
     }
+    // printf("--------\n");
 
     delete[] k1Product;
     delete[] k2Product;
@@ -110,11 +115,6 @@ void RungeKutta(int M, int ySize, double h, cx * y, cx * A, cx * B) {
     delete[] k3;
     delete[] k4;
 
-    // printf("Result: \n");
-    // for(int i = 0; i < ySize; i++)
-    // {
-    //     printf("%f + %f i\n", real(y[i]), imag(y[i]));
-    // }
 
     return ;
 }
@@ -147,7 +147,7 @@ int main() {
 
     double h = 0.1;  // The time step size
 
-    RungeKutta(M, 2, h, &u[0], &A[0,0,0], &B[0,0]);
+    RungeKutta(2, 2, h, &u[0], &A[0,0,0], &B[0,0]);
 
     printf("%f + %f i\n", real(u[0]), imag(u[0]));
     printf("%f + %f i\n", real(u[1]), imag(u[1]));
