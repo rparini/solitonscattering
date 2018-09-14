@@ -10,7 +10,7 @@ ctypedef double complex cx
 ctypedef vector[complex] cxv
 
 cdef extern from "CUtilities.cpp":
-    cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
+    void RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
 
 # The ArrayWrapper class is largely copied from Gael Varoquaux, http://gael-varoquaux.info/blog/?p=157
 from libc.stdlib cimport free
@@ -61,14 +61,12 @@ cdef class ArrayWrapper:
 
 # Previously used 'float h' which has half the precision of the python 'float' and was causing rounding issues, 'double h' seems to have fixed this
 def CRungeKuttaArray(double h,
-                np.ndarray[np.complex128_t, ndim=1, mode = 'c'] y0 not None,
+                np.ndarray[np.complex128_t, ndim=1, mode = 'c'] y not None,
                 np.ndarray[np.complex128_t, ndim=3, mode = 'c'] A not None,
                 np.ndarray[np.complex128_t, ndim=2, mode = 'c'] B = None):
 
-    cdef int ySize = len(y0)
-    cdef cx * y
+    cdef int ySize = len(y)
     cdef np.ndarray ndarray
-    cdef int size = ySize
 
     # Runge Kutta uses a midpoint so the first step of size h requires A[0] = A(a), A[1]=A(h/2), A[2]=A(h)
     # The number of steps to be taken based on the size of the supplied A is therefore M
@@ -79,12 +77,12 @@ def CRungeKuttaArray(double h,
         B = np.zeros((A.shape[0], ySize), dtype = 'complex')
 
     # Call the C++ function
-    y = RungeKutta(M, ySize, h, &y0[0], &A[0,0,0], &B[0,0])
+    RungeKutta(M, ySize, h, &y[0], &A[0,0,0], &B[0,0])
     # y = RungeKutta(M, ySize, h, y0, A, B)
     # cdef cxv *yPoint = & y
 
     array_wrapper = ArrayWrapper()
-    array_wrapper.set_data(size, <void*> y)
+    array_wrapper.set_data(ySize, <void*> y)
     ndarray = np.array(array_wrapper, copy=False)
     # Assign our object to the 'base' of the ndarray object
     ndarray.base = <PyObject*> array_wrapper

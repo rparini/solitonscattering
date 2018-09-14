@@ -6,7 +6,6 @@
 #include <iomanip>
 
 typedef std::complex<double> cx;
-typedef std::vector<cx> cxv;
 
 // indexing: A[m,i,j] = A[m * uSize * uSize + i * uSize + j]
 int index3D(int uSize, int m, int i, int j) {
@@ -17,23 +16,18 @@ int index2D(int uSize, int m, int i) {
 	return m * uSize + i;
 }
 
-cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B) {
+void RungeKutta(int M, int ySize, double h, cx * y, cx * A, cx * B) {
     // Solve y'(t) = A(t).y(t) + B(t)
     // These input arrays will be assumed to be flattened to 1D so that
     // A = [[a00 a01    = [a00, a01, a10, a11]
     //       a10 a11]]
     // h is the distance in t between consecutive A and B
     // Since Runge Kutta uses a midpoint step the 'step size' is 2h
-    // y0 is the initial value
+    // y is the initial value and the final value will be stored here
     // ySize is the size of the field vector y (also size of y0)
 
     // M is the number of steps to be taken by Runge Kutta
     // h is the size of these steps
-
-    cx *y;
-    y = new cx [ySize];
-
-    // cxv y(ySize);
 
     cx *k1, *k2, *k3, *k4;
     k1 = new cx [ySize];
@@ -49,10 +43,6 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B) {
     k2Product = new cx [ySize];
     k3Product = new cx [ySize];
     k4Product = new cx [ySize];
-
-    // u(t = 0) = u0
-    for (int i = 0; i < ySize; ++i)
-        y[i] = y0[i];
 
     int indexi, indexj, indexij, nextIndexij;
 
@@ -78,7 +68,6 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B) {
                 k2Product[i] += A[indexij] * (y[j] + k1[j]/2.);
             }
             indexi = index2D(ySize,2*m+1,i);
-
             k2[i] = h*(k2Product[i] + B[indexi]);
         }
 
@@ -127,7 +116,7 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B) {
     //     printf("%f + %f i\n", real(y[i]), imag(y[i]));
     // }
 
-    return y;
+    return ;
 }
 
 int main() {
@@ -135,15 +124,13 @@ int main() {
     int M = 6;      // The number of steps in the domain t
 
     // Give the initial value of the field u(t = t0) = u0
-    cxv u0(2);
-    u0[0] = cx (0., 0.);
-    u0[1] = cx (0., 0.);
+    cx u[2] = {cx(0., 0.), cx(0., 0.)};
 
     // Define the size of the arrays during runtime with 'new' command
     // A = new cx [M * 2 * 2];
     // B = new cx [M * 2];
-    cxv A(M * 2 * 2);
-    cxv B(M * 2);
+    cx A[M * 2 * 2];
+    cx B[M * 2];
 
     // Create the multidimensional array as a dynamic linear array
     // indexing: A[m,i,j] = A[m * 2 * 2 + i * 2 + j]
@@ -160,13 +147,13 @@ int main() {
 
     double h = 0.1;  // The time step size
 
-    // cxv result(2);
-    // result = RungeKutta(M, 2, h, u0, A, B);
+    RungeKutta(M, 2, h, &u[0], &A[0,0,0], &B[0,0]);
 
-    cx * result = RungeKutta(M, 2, h, &u0[0], &A[0,0,0], &B[0,0]);
-
-    printf("%f + %f i\n", real(result[0]), imag(result[0]));
-    printf("%f + %f i\n", real(result[1]), imag(result[1]));
+    printf("%f + %f i\n", real(u[0]), imag(u[0]));
+    printf("%f + %f i\n", real(u[1]), imag(u[1]));
 
     return 0;
 }
+
+
+
