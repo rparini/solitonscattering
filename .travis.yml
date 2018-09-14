@@ -8,11 +8,9 @@ matrix:
     - os: osx
 
 install:
-  - pwd
   - pip install -r requirements.txt
   - python setup.py install
 
 script:
   - cd .. 
-  - pwd
   - pytest -v -n 2 --durations=10
