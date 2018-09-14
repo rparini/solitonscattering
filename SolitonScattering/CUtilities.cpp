@@ -9,11 +9,15 @@ typedef std::complex<double> cx;
 typedef std::vector<cx> cxv;
 
 // indexing: A[m,i,j] = A[m * uSize * uSize + i * uSize + j]
-int index3D(int uSize, int m, int i, int j) {return (m * uSize + i ) * uSize + j;}
-int index2D(int uSize, int m, int i) {return m * uSize + i;}
+int index3D(int uSize, int m, int i, int j) {
+	return (m * uSize + i ) * uSize + j;
+}
 
-cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
-{
+int index2D(int uSize, int m, int i) {
+	return m * uSize + i;
+}
+
+cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B) {
     // Solve y'(t) = A(t).y(t) + B(t)
     // These input arrays will be assumed to be flattened to 1D so that
     // A = [[a00 a01    = [a00, a01, a10, a11]
@@ -52,14 +56,11 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
 
     int indexi, indexj, indexij, nextIndexij;
 
-    for (int m = 0; m < M; ++m)
-    {
+    for (int m = 0; m < M; ++m) {
         // k1_i = h * (A[2m]_ij * y_j + B[2m]_i)
-        for (int i = 0; i < ySize; ++i)
-        {
+        for (int i = 0; i < ySize; ++i) {
             k1Product[i] = 0;
-            for (int j = 0; j < ySize; ++j)
-            {
+            for (int j = 0; j < ySize; ++j) {
                 // Calculate A[m]_ij * y_j
                 indexij = index3D(ySize,2*m,i,j);
                 k1Product[i] += A[indexij] * y[j];
@@ -69,11 +70,9 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
         }
 
         // k2_i = h * (A[2m+1]_ij * (y_j + k1_j/2) + B[2m+1]_i)
-        for (int i = 0; i < ySize; ++i)
-        {
+        for (int i = 0; i < ySize; ++i) {
             k2Product[i] = 0;
-            for (int j = 0; j < ySize; ++j)
-            {
+            for (int j = 0; j < ySize; ++j) {
                 // Calculate A[2m+1]_ij * (y_j + k1_j/2)
                 indexij = index3D(ySize,2*m+1,i,j);
                 k2Product[i] += A[indexij] * (y[j] + k1[j]/2.);
@@ -84,11 +83,9 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
         }
 
         // k3_i = h * (AInterp[2m+1]_ij * (y_j + k2_j/2) + B[2m+1]_i)
-        for (int i = 0; i < ySize; ++i)
-        {
+        for (int i = 0; i < ySize; ++i) {
             k3Product[i] = 0;
-            for (int j = 0; j < ySize; ++j)
-            {
+            for (int j = 0; j < ySize; ++j) {
                 // Calculate AInterp[m]_ij * (y_j + k2_j/2)
                 indexij = index3D(ySize,2*m+1,i,j);
                 k3Product[i] += A[indexij] * (y[j] + k2[j]*0.5);
@@ -98,11 +95,9 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
         }
 
         // k4_i = h * (A[2m+2]_ij * (y_j + k3_j) + B[2m+2]_i)
-        for (int i = 0; i < ySize; ++i)
-        {
+        for (int i = 0; i < ySize; ++i) {
             k4Product[i] = 0;
-            for (int j = 0; j < ySize; ++j)
-            {
+            for (int j = 0; j < ySize; ++j) {
                 // Calculate A[m+1]_ij * (y_j + k3_j)
                 indexij = index3D(ySize,2*m+2,i,j);
                 k4Product[i] += A[indexij] * (y[j] + k3[j]);
@@ -135,8 +130,7 @@ cx * RungeKutta(int M, int ySize, double h, cx * y0, cx * A, cx * B)
     return y;
 }
 
-int main()
-{
+int main() {
     // --- Set up the data to run the Runge Kutta function ---
     int M = 6;      // The number of steps in the domain t
 
@@ -154,8 +148,7 @@ int main()
     // Create the multidimensional array as a dynamic linear array
     // indexing: A[m,i,j] = A[m * 2 * 2 + i * 2 + j]
     // m runs from 0 to M and indexes the time A[m,i,j] = A[i,j](t = m * h)
-    for (int m = 0; m < M; ++m)
-    {
+    for (int m = 0; m < M; ++m) {
         A[index3D(2, m, 0, 0)] = cx(-4, 0);
         A[index3D(2, m, 0, 1)] = cx(3, 0);
         A[index3D(2, m, 1, 0)] = cx(-2.4, 0);
