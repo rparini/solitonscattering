@@ -1,9 +1,5 @@
 #include <iostream>
-#include <stdio.h>
 #include <complex>
-#include <vector>
-#include <math.h>
-#include <iomanip>
 
 typedef std::complex<double> cx;
 
