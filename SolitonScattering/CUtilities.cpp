@@ -102,15 +102,12 @@ int main() {
     // Give the initial value of the field u(t = t0) = u0
     cx u[2] = {cx(0., 0.), cx(0., 0.)};
 
-    // Define the size of the arrays during runtime with 'new' command
-    // A = new cx [M * 2 * 2];
-    // B = new cx [M * 2];
+    // Create the multidimensional array as a linear array
+    // indexing: A[m,i,j] = A[m*2*2 + i*2 + j]
+    // m runs from 0 to M and indexes the time A[m,i,j] = A[i,j](t = m * h)
     cx A[M * 2 * 2];
     cx B[M * 2];
 
-    // Create the multidimensional array as a dynamic linear array
-    // indexing: A[m,i,j] = A[m * 2 * 2 + i * 2 + j]
-    // m runs from 0 to M and indexes the time A[m,i,j] = A[i,j](t = m * h)
     for (int m = 0; m < M; ++m) {
         A[index3D(2, m, 0, 0)] = cx(-4, 0);
         A[index3D(2, m, 0, 1)] = cx(3, 0);
