@@ -29,70 +29,62 @@ void RungeKutta(int M, int ySize, double h, cx * y, cx * A, cx * B) {
     // M is the number of steps to be taken by Runge Kutta
     // h is the size of these steps
 
-    cx *k1, *k2, *k3, *k4;
-    k1 = new cx [ySize];
-    k2 = new cx [ySize];
-    k3 = new cx [ySize];
-    k4 = new cx [ySize];
+    cx k1[ySize];
+    cx k2[ySize];
+    cx k3[ySize];
+    cx k4[ySize];
 
-    cx *k1Product;
-    cx *k2Product;
-    cx *k3Product;
-    cx *k4Product;
-    k1Product = new cx [ySize];
-    k2Product = new cx [ySize];
-    k3Product = new cx [ySize];
-    k4Product = new cx [ySize];
+    cx kprod[ySize];
 
     int indexi, indexj, indexij, nextIndexij;
 
     for (int m = 0; m < M; ++m) {
         // k1_i = h * (A[2m]_ij * y_j + B[2m]_i)
         for (int i = 0; i < ySize; ++i) {
-            k1Product[i] = 0;
+            kprod[i] = 0;
             for (int j = 0; j < ySize; ++j) {
                 // Calculate A[m]_ij * y_j
                 indexij = index3D(ySize,2*m,i,j);
-                k1Product[i] += A[indexij] * y[j];
+                kprod[i] += A[indexij] * y[j];
             }            
             indexi = index2D(ySize,2*m,i);
-            k1[i] = h*(k1Product[i] + B[indexi]);
+            k1[i] = h*(kprod[i] + B[indexi]);
         }
 
         // k2_i = h * (A[2m+1]_ij * (y_j + k1_j/2) + B[2m+1]_i)
         for (int i = 0; i < ySize; ++i) {
-            k2Product[i] = 0;
+            kprod[i] = 0;
             for (int j = 0; j < ySize; ++j) {
                 // Calculate A[2m+1]_ij * (y_j + k1_j/2)
                 indexij = index3D(ySize,2*m+1,i,j);
-                k2Product[i] += A[indexij] * (y[j] + k1[j]/2.);
+                kprod[i] += A[indexij] * (y[j] + k1[j]/2.);
             }
             indexi = index2D(ySize,2*m+1,i);
-            k2[i] = h*(k2Product[i] + B[indexi]);
+            k2[i] = h*(kprod[i] + B[indexi]);
         }
 
         // k3_i = h * (AInterp[2m+1]_ij * (y_j + k2_j/2) + B[2m+1]_i)
         for (int i = 0; i < ySize; ++i) {
-            k3Product[i] = 0;
+            kprod[i] = 0;
             for (int j = 0; j < ySize; ++j) {
                 // Calculate AInterp[m]_ij * (y_j + k2_j/2)
                 indexij = index3D(ySize,2*m+1,i,j);
-                k3Product[i] += A[indexij] * (y[j] + k2[j]*0.5);
+                kprod[i] += A[indexij] * (y[j] + k2[j]*0.5);
             }
             indexi = index2D(ySize,2*m+1,i);
-            k3[i] = h*(k3Product[i] + B[indexi]);
+            k3[i] = h*(kprod[i] + B[indexi]);
         }
 
         // k4_i = h * (A[2m+2]_ij * (y_j + k3_j) + B[2m+2]_i)
         for (int i = 0; i < ySize; ++i) {
-            k4Product[i] = 0;
+            kprod[i] = 0;
             for (int j = 0; j < ySize; ++j) {
                 // Calculate A[m+1]_ij * (y_j + k3_j)
                 indexij = index3D(ySize,2*m+2,i,j);
-                k4Product[i] += A[indexij] * (y[j] + k3[j]);
+                kprod[i] += A[indexij] * (y[j] + k3[j]);
             }
             indexi = index2D(ySize,2*m+2,i);
-            k4[i] = h*(k4Product[i] + B[indexi]);
+            k4[i] = h*(kprod[i] + B[indexi]);
         }
 
         // y[m+1] = y[m] + (k1 + 2*k2 + 2*k3 + k4)/6
@@ -105,18 +97,6 @@ void RungeKutta(int M, int ySize, double h, cx * y, cx * A, cx * B) {
 	    // }
     }
     // printf("--------\n");
-
-    delete[] k1Product;
-    delete[] k2Product;
-    delete[] k3Product;
-    delete[] k4Product;
-    delete[] k1;
-    delete[] k2;
-    delete[] k3;
-    delete[] k4;
-
-
-    return ;
 }
 
 int main() {
