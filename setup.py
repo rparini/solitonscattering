@@ -18,20 +18,20 @@ else:
     use_cython = True
 
 print('use_cython =', use_cython)
-
-cmdclass = { }
+if use_cython:
+    cmdclass = {'build_ext': build_ext}
+else:
+    cmdclass = {}
 
 import os
 path = os.path.dirname(os.path.abspath(__file__))
 
 ext = '.pyx' if use_cython else '.cpp'
 
-ext_modules = [Extension("SolitonScattering.CUtilities_caller", [path+"/SolitonScattering/CUtilities_caller"+ext], language = "c++", include_dirs = [np.get_include()])]
+ext_modules = [Extension("SolitonScattering.CUtilities_caller", [path+"/SolitonScattering/CUtilities_caller"+ext], 
+    language = "c++", 
+    include_dirs = [np.get_include()])]
 
-
-if use_cython:
-    ext_modules = cythonize(ext_modules)
-    cmdclass.update({ 'build_ext': build_ext })
 
 packages = [
     'SolitonScattering',
@@ -42,6 +42,7 @@ packages = [
 setup(
     name = 'SolitonScattering',
     author = 'Robert Parini',
+    cmdclass = cmdclass,
     ext_modules = ext_modules,
     packages = packages,
     platforms = ['all']
