@@ -4,6 +4,9 @@ from distutils.core import setup
 from distutils.extension import Extension
 import numpy as np
 
+# get the version, this will assign __version__
+exec(open('SolitonScattering/version.py').read())
+
 import os
 path = os.path.dirname(os.path.abspath(__file__))
 
@@ -30,6 +33,7 @@ packages = [
 # configure setup
 setup(
     name = 'SolitonScattering',
+    version = __version__,
     author = 'Robert Parini',
     cmdclass = cmdclass,
     ext_modules = ext_modules,
