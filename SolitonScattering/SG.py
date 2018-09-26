@@ -952,6 +952,30 @@ class ScatteringData(object):
 		else:
 			plt.show()
 
+	def typed_kinematics(self):
+		result = {}
+		for t in ['Kink', 'Antikink', 'Breather']:
+			result[t] = {}
+			data = self.data.where(self.data['types'] == SineGordon.type_encoding[t])
+
+			# plot frequency
+			freq = abs(solitonFrequency(data['eigenvalues']))
+			freq = freq.where(freq < .999)
+			if t == 'Breather':
+				result[t]['frequency'] = np.sort(freq)[:,0]
+
+			# plot speed
+			speed = abs(solitonVelocity(data['eigenvalues']))
+			speed = speed.where(freq < .999)
+			if t == 'Breather':
+				# plot lowest frequency breather
+				speed = speed[:, np.argsort(freq)[:,0]]
+			else:
+				speed = np.sort(speed)
+			result[t]['speed'] = speed
+
+		return result
+
 	def plot_2Dkinematics(self, axis, showLabels=True, linewidth=1, saveFile=None):
 		import matplotlib.pyplot as plt
 		for t in ['Kink', 'Antikink', 'Breather']:
