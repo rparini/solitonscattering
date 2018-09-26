@@ -12,11 +12,6 @@ import itertools
 from . import ODE
 from .timeStep import timeStepFunc
 
-try:
-	import matplotlib
-except ImportError:
-	warnings.warn('Unable to import matplotlib')
-
 isnparray = lambda x: isinstance(x, np.ndarray)
 
 def getval(state, key):
