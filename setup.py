@@ -10,6 +10,8 @@ path = os.path.dirname(os.path.abspath(__file__))
 try:
     from Cython.Distutils import build_ext
     from Cython.Build import cythonize
+    print('Using cython')
+
     cmdclass = {'build_ext': build_ext}
 
     ext_modules = [Extension("SolitonScattering.CUtilities_caller", [path+"/SolitonScattering/CUtilities_caller.pyx"], 
@@ -17,6 +19,7 @@ try:
         include_dirs = [np.get_include()],
     )]
 except ImportError:
+    print('Not using cython')
     cmdclass = {}
     ext_modules = []
 
