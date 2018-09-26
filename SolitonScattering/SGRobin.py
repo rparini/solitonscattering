@@ -1,6 +1,5 @@
 import numpy as np
 from scipy import pi, sqrt, cos, sign, sin, log, tan, arctan, exp
-from matplotlib import pyplot as plt
 
 from scipy.optimize import brentq
 from scipy.integrate import simps
